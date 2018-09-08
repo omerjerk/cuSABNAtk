@@ -1,21 +1,39 @@
+/*
+
+COMMAND LINE ARGUMENTS
+
+  "-data=<path>":       the path to the database file
+  "-query=<path>":      the path to the query parameters file
+  "-i=<iterations>":    specify the number of iterations 
+
+*/
+
+
 #include <iostream>
 #include <fstream>
 #include <iomanip>
 #include <chrono>
-
+#include <utility>
 #include "BVCounter.hpp"
+#include "helper_string.h"
 #include "GPUCounter.hpp"
+
+static std::vector<char> def{0, 1, 1, 0, 1, 1, 0, 0, \
+                             0, 0, 2, 0, 1, 2, 0, 1, \
+                             1, 1, 1, 0, 1, 1, 1, 0};
+
+typedef std::pair<int,int> state;
 
 struct call {
     void init(int, int) { nijk = 0; }
 
-    void finalize(int) { }
+    void finalize(int) {}
 
-    void operator()(int) { }
+    void operator()(int) {}
 
     void operator()(int Nijk, int i) {
-        std::cout << "call from bvc: " << i << " " << Nijk << std::endl;
-        nijk = Nijk;
+//      std::cout << "call from bvc: " << i << " " << Nijk << std::endl;
+      nijk = Nijk;
     } // operator()
 
     int score() const { return nijk; }
@@ -23,96 +41,257 @@ struct call {
     int nijk = 0;
 }; // struct call
 
+int loadDatabase(const char* pFile, std::vector<char> &pDatabase);
+bool loadQuery(const char* pFile, std::vector<state>& pStates);
+std::vector<std::string> split(char *phrase, std::string delimiter);
 
-int main(int argc, char* argv[]) {
-    // 3 variables (say X0, X1, X2), 8 observations
-    std::vector<char> D{0, 1, 1, 0, 1, 1, 0, 0, \
-                        0, 0, 2, 0, 1, 2, 0, 1, \
-                        1, 1, 1, 0, 1, 1, 1, 0 };
-    int n = 3;
-    int m = 8;
-    int c = 3;
-    if(argc > 1) {
-      printf("data file: %s\n", argv[1]);
-      D.clear();
-      n = 0;
-      std::ifstream inFile;
-      inFile.open(argv[1]);
-      bool open = inFile.is_open();
-      printf("file open: %s\n", open ? "sucess" : "failed");
-      char *inputArray = new char[2048 * 10];
+template <int N>
+bool runTest(std::vector<char>& D, std::vector<state> states, int n, bool stateQuery, int iterations);
 
-      bool done = !open;
-      while (!done) {
+int main(int argc, char *argv[]) {
+  std::vector<char> D;
+  std::vector<state> states;
+  int n = 0;
 
-        inFile.getline(inputArray, 2048 * 10);
-        int len = strlen(inputArray);
+  int iterations = 1;
+  bool stateQuery = false;
+  char *filePath = 0;
+  char *queryPath = 0;
 
-        for (int charIndex = 0; charIndex < len; charIndex += 2) {
-          D.push_back(atoi(&inputArray[charIndex]));
-        }
-        if (n == 0) {
-          m = D.size();
-        }
-        n++;
-        done = inFile.eof();
-      }
-    }
+  getCmdLineArgumentString(argc, (const char **) argv, "data", &filePath);
 
-    if(argc > 2)
-    {
-      c = atoi(argv[2]);
-    }
+  if (0 != filePath) {
+    n = loadDatabase(filePath, D);
+  } else {
+    D = def;
+    n = 3;
+  }
 
-    printf("n=%d m=%d c=%d\n", n, m, c);
+  getCmdLineArgumentString(argc, (const char **) argv, "query", &queryPath);
 
-    // use one word (64bit) because n < 64
-    BVCounter<1> bvc = create_BVCounter<1>(n, m, std::begin(D));
+  if (0 != queryPath) {
+    stateQuery = loadQuery(queryPath, states);
+  }
 
-    GPUCounter<1> gpuc = create_GPUCounter<1>(n, m, std::begin(D));
+  if (checkCmdLineFlag(argc, (const char **) argv, "i")) {
+    iterations = getCmdLineArgumentInt(argc, (const char **) argv, "i");
+  }
 
-    using set_type = BVCounter<1>::set_type;
+  int m = D.size() / n;
 
-    auto xi = set_empty<set_type>();
-    auto pa = set_empty<set_type>();
+  int words = ceil(n / 64.0);
+  printf("n=%d, m=%d, words=%d\n", n, m, words);
 
-    // let's count X0=0 and [X1=0,X2=0...Xn-1=0]:
+  switch (words) {
+    case 1:
+      runTest<1>(D, states, n, stateQuery, iterations);
+      break;
+    case 2:
+      runTest<2>(D, states, n, stateQuery, iterations);
+      break;
+    // ... todo add more to accomadate larger data sets ...
+    default:
+      printf(" %d variables not suppoted!\n", n);
+  }
+  return 0;
+}
 
-    // first node
-    xi = set_add(xi, 0);
-    std::vector<char> sxi{0};
+template <int N>
+bool runTest( std::vector<char>& D, std::vector<state> states, int n, bool stateQuery, int iterations)
+{
+  int m = D.size() / n;
+  BVCounter<N> bvc = create_BVCounter<N>(n, m, std::begin(D));
+  GPUCounter<N> gpuc = create_GPUCounter<N>(n, m, std::begin(D));
 
-    // then parents
-    std::vector<char> spa;
-    spa.reserve(n);
-    for(int i = 1; i < c; i++)
-    {
-      pa = set_add(pa, i);
-      spa.push_back(1);
-    }
+  using set_type = typename BVCounter<N>::set_type;
 
-    // callback for each xi
-    std::vector<call> CCpu(1);
-    std::vector<call> CGpu1(1);
-    std::vector<call> CGpu2(1);
+  auto xi = set_empty<set_type>();
+  auto pa = set_empty<set_type>();
 
-    // and here we go
+  // first node
+  xi = set_add(xi, states[0].first);
+  std::vector<char> sxi{ (char)states[0].second};
+
+  // then parents
+  std::vector<char> spa;
+  spa.reserve(n);
+  for (int i = 1; i < states.size(); i++) {
+    pa = set_add(pa, states[i].first);
+    spa.push_back((char)states[i].second);
+  }
+
+  // callback for each xi
+  std::vector<call> CCpu(1);
+  std::vector<call> CGpu(1);
+  std::vector<std::chrono::duration<double>> times;
+  std::vector<std::chrono::duration<double>> gpuTimes;
+
+  // cpu runs...
+  for(int i = 0; i < iterations; i++) {
     auto t1 = std::chrono::system_clock::now();
-    bvc.apply(xi, pa, CCpu);
+    if(stateQuery) {
+      bvc.apply(xi, pa, sxi, spa, CCpu);
+    }
+    else{
+      bvc.apply(xi, pa, CCpu);
+    }
     auto t2 = std::chrono::system_clock::now();
     auto elapsed_cpu = std::chrono::duration<double>(t2 - t1);
+    times.push_back(elapsed_cpu);
+  }
 
-    auto t3 = std::chrono::system_clock::now();
-    gpuc.apply(xi, pa, CGpu1); // first time in penalty?
-    auto t4 = std::chrono::system_clock::now();
-    gpuc.apply(xi, pa, CGpu2);
-    auto t5 = std::chrono::system_clock::now();
+  // gpu runs...
+  for(int i = 0; i < iterations; i++) {
+    auto t1 = std::chrono::system_clock::now();
+    if(stateQuery) {
+      gpuc.apply(xi, pa, sxi, spa, CCpu);
+    }
+    else{
+      gpuc.apply(xi, pa, CCpu);
+    }
+    auto t2 = std::chrono::system_clock::now();
+    auto elapsed_cpu = std::chrono::duration<double>(t2 - t1);
+    gpuTimes.push_back(elapsed_cpu);
+  }
 
-    auto elapsed_gpu1 = std::chrono::duration<double>(t4 - t3);
-    auto elapsed_gpu2 = std::chrono::duration<double>(t5 - t4);
+  double total = 0;
+  double max = 0;
 
-    printf("cpu=%lf\ngpu1=%lf\ngpu2=%lf\n", elapsed_cpu.count(), elapsed_gpu1.count(),elapsed_gpu2.count());
-    printf("cpu=%d\ngpu1=%d\ngpu2=%d\n", CCpu[0].score(), CGpu1[0].score(), CGpu2[0].score());
+  for(int i = 0; i < iterations; i++)
+  {
+    if(times[i].count() > max){
+      max = times[i].count();
+    }
 
-    return 0;
-} // main
+    total += times[i].count();
+  }
+
+  double average = total / iterations;
+
+  for(int index = 0; index < CCpu.size(); index++){
+    printf("cpu score %d\n", CCpu[index].score());
+  }
+
+  printf("cpu avg=%lf max=%lf\n", average, max);
+
+  for(int i = 0; i < iterations; i++)
+  {
+    if(gpuTimes[i].count() > max){
+      max = gpuTimes[i].count();
+    }
+
+    total += gpuTimes[i].count();
+  }
+
+  average = total / iterations;
+
+  for(int index = 0; index < CCpu.size(); index++){
+    printf("gpu score %d\n", CCpu[index].score());
+  }
+
+  printf("gpu avg=%lf max=%lf\n", average, max);
+  return true;
+}
+
+static const int MAX_DATA_PER_LINE = 2048 * 16;
+
+int loadDatabase(const char* pFile, std::vector<char> &pDatabase) {
+  int variableCount = 0;
+  bool done = false;
+  char *inputArray = 0;
+
+  std::ifstream inFile(pFile);
+
+  if (!inFile.is_open()) {
+    printf("could not open %s\n", pFile);
+    return false;
+  }
+
+  inputArray = new char[MAX_DATA_PER_LINE];
+  pDatabase.clear();
+
+  while (!done) {
+    inFile.getline(inputArray, MAX_DATA_PER_LINE);
+    int len = strlen(inputArray);
+
+    std::vector<std::string> tokens;
+    tokens = split(inputArray, " ");
+
+    for (int token = 0; token < tokens.size(); token++) {
+      std::string temp = tokens[token];
+      pDatabase.push_back(atoi(temp.c_str()));
+    }
+
+    if (len > 0) {
+      variableCount++;
+    }
+    done = inFile.eof();
+  }
+
+  if (pDatabase.size() % variableCount != 0) {
+    printf("WARNING dimension mismatch total: %lu\t variable %d\n",
+           pDatabase.size(),
+           variableCount);
+  }
+
+  delete[] inputArray;
+  return variableCount;
+}
+
+bool loadQuery(const char* pFile, std::vector<state>& pStates){
+  bool done = false;
+  bool stateQuery = false;
+  char *inputArray = 0;
+
+  std::ifstream inFile(pFile);
+
+  if (!inFile.is_open()) {
+    printf("could not open %s\n", pFile);
+    return false;
+  }
+
+  inputArray = new char[MAX_DATA_PER_LINE];
+  pStates.clear();
+
+  while (!done) {
+    inFile.getline(inputArray, MAX_DATA_PER_LINE);
+    int len = strlen(inputArray);
+
+    if(len > 0) {
+      std::vector<std::string> tokens;
+      tokens = split(inputArray, " ");
+      state temp;
+      temp.first = atoi(tokens[0].c_str());
+
+      if (tokens.size() > 1) {
+        temp.second = atoi(tokens[1].c_str());
+        stateQuery = true;
+      }
+
+      pStates.push_back(temp);
+    }
+
+    done = inFile.eof();
+  }
+
+  delete[] inputArray;
+  return stateQuery;
+}
+
+std::vector<std::string> split(char *phrase, std::string delimiter){
+  std::vector<std::string> list;
+  std::string s = std::string(phrase);
+  size_t pos = 0;
+  std::string token;
+  while ((pos = s.find(delimiter)) != std::string::npos) {
+    token = s.substr(0, pos);
+    list.push_back(token);
+    s.erase(0, pos + delimiter.length());
+  }
+
+  if(s.size() > 0) {
+    list.push_back(s);
+  }
+
+  return list;
+}

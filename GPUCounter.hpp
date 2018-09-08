@@ -62,13 +62,14 @@ public:
 
       cudaDeviceSynchronize();
 
-      cudaCallCount(
-      	max_block_count,
-      	block_size,
-      	base_ptr->bitvector_size,
-        bitvectors_for_intersect.size(),
-      	countListPtr,
-        reduce,
+      cudaCallBlockCount(
+      	max_block_count, //todo
+      	block_size, //threads per block
+      	base_ptr->bitvector_size, // word count
+        bitvectors_for_intersect.size(), // state count
+        1, // always one configuration
+      	countListPtr, // gridPtr
+        reduce, // result
       	0);
 
        cudaDeviceSynchronize();
@@ -80,79 +81,72 @@ public:
     void apply(const set_type &xi, const set_type &pa, std::vector<score_functor> &F) const {
 
       std::vector<uint64_t*> bitvectors_for_intersect;
+      auto xa_vect = as_vector(xi);
+      auto pa_vect = as_vector(pa);
 
+      for(int i = 0; i < pa_vect.size(); i++)
+      {
+        xa_vect.push_back(pa_vect[i]);
+      }
+
+      int configCount = 1;
+
+      for(int i = 0; i < xa_vect.size(); i++)
+      {
+         int id = xa_vect[i];
+         int states = this->base_ptr->node_ptr[id].r;
+         configCount *= states;
+  //       printf("%d %d\n", id, states);
+      }
+
+      std::vector<int> bases;
+      bases.push_back(1);
+      for(int b = 1; b < xa_vect.size(); b++)
+      {
+         bases[b] = bases[b-1] * this->base_ptr->node_ptr[b-1].r;
+  //       printf("base %d\n", bases[b]);
+      }
+
+  //    printf("total configs %d\n",configCount);
+
+      for(int configIndex = 0; configIndex < configCount; configIndex++)
+      {
+         for(int stateIndex = 0; stateIndex < xa_vect.size(); stateIndex++)
+         {
+              int state = configIndex / bases[stateIndex] % this->base_ptr->node_ptr[stateIndex].r;
+              uint64_t* bv_ptr =  &this->base_ptr->node_ptr[stateIndex].bitvectors[state * base_ptr->bitvector_size];
+              bitvectors_for_intersect.push_back(bv_ptr);
+  //            printf("%d ", state);
+         }
+  //       printf("\n");
+      }
+
+      if(bitvectors_for_intersect.size() * base_ptr->bitvector_size > 2048)
+      {
+        printf("Query block is too big for this implementation! %d %d %d\n",
+        bitvectors_for_intersect.size() * base_ptr->bitvector_size,
+        bitvectors_for_intersect.size(),
+        base_ptr->bitvector_size);
+        return;
+      }
       // todo generate block of queires
-      int test_conf = 1;
-      int config_count = 1;
-      uint64_t* bv_ptr0 = &this->base_ptr->node_ptr[0].bitvectors[1 * base_ptr->bitvector_size];
-      uint64_t* bv_ptr1 = &this->base_ptr->node_ptr[1].bitvectors[1 * base_ptr->bitvector_size];
-      uint64_t* bv_ptr2 = &this->base_ptr->node_ptr[2].bitvectors[1 * base_ptr->bitvector_size];
-      bitvectors_for_intersect.push_back(bv_ptr0);
-      bitvectors_for_intersect.push_back(bv_ptr1);
-      bitvectors_for_intersect.push_back(bv_ptr2);
-
-      if(test_conf == 1){
-        config_count++;
-        bv_ptr0 = &this->base_ptr->node_ptr[0].bitvectors[0 * base_ptr->bitvector_size];
-        bv_ptr1 = &this->base_ptr->node_ptr[1].bitvectors[0 * base_ptr->bitvector_size];
-        bv_ptr2 = &this->base_ptr->node_ptr[2].bitvectors[0 * base_ptr->bitvector_size];
-
-        bitvectors_for_intersect.push_back(bv_ptr0);
-        bitvectors_for_intersect.push_back(bv_ptr1);
-        bitvectors_for_intersect.push_back(bv_ptr2);
-      }
-
-      if(test_conf == 3){
-        bitvectors_for_intersect.clear();
-        config_count = 1;
-
-        for(int i = 0; i < this->m(); i ++){
-          bv_ptr0 = &this->base_ptr->node_ptr[0].bitvectors[0 * base_ptr->bitvector_size];
-          bitvectors_for_intersect.push_back(bv_ptr0);
-        }
-
-        config_count++;
-        for(int i = 0; i < this->m(); i ++){
-          config_count++;
-          bv_ptr0 = &this->base_ptr->node_ptr[0].bitvectors[1 * base_ptr->bitvector_size];
-          bitvectors_for_intersect.push_back(bv_ptr0);
-        }
-      }
-
-
-
-      // todo setup block sizes...
-      const int block_size = 1024;//deviceProp.maxThreadsPerBlock;
-    	const uint max_block_count = 65535;
-    	uint num_blocks = (base_ptr->bitvector_size + block_size - 1) / block_size;
-
       memcpy(countListPtr, bitvectors_for_intersect.data(), bitvectors_for_intersect.size() * sizeof(unsigned long long*));
 
-   //      w +--------+
-   //     o /        /|
-   //    r /        / |
-   //   d /        /  |
-   //  s +--------+   |
-   // c  | states |   +
-   // f  |        |  /
-   // g  |        | /
-   // s  |        |/
-   //    +--------+
-      cudaDeviceSynchronize();
+     cudaDeviceSynchronize();
 
-      cudaCallBlockCount(
-      	max_block_count, //todo
-      	block_size, //threads per block
+     cudaCallBlockCount(
+      	65535, //todo
+      	1024, //threads per block
       	base_ptr->bitvector_size, // word count
-        bitvectors_for_intersect.size() / config_count, // state count
-        config_count, // config count
+        bitvectors_for_intersect.size() / configCount, // state count
+        configCount, // config count
       	countListPtr, // gridPtr
         reduce, // result
       	0);
 
        cudaDeviceSynchronize();
 
-       for(int c = 0; c < config_count; c++){
+       for(int c = 0; c < configCount; c++){
          F[0](reduce[c],c);
        }
     }
@@ -262,7 +256,7 @@ GPUCounter<N> create_GPUCounter(int n, int m, Iter it) {
   }
 
   cudaMallocManaged(&p.reduce, p.base_ptr->bitvector_size * sizeof(unsigned long long));
-  cudaMallocManaged(&p.countListPtr, sizeof(unsigned long long*) * n);
+  cudaMallocManaged(&p.countListPtr, sizeof(unsigned long long*) * 2048); // 2048 bit vectors per query block
 
   return p;
 } // create_GPUCounter
