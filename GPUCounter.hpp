@@ -121,32 +121,24 @@ public:
   //       printf("\n");
       }
 
-      if(bitvectors_for_intersect.size() * base_ptr->bitvector_size > 2048)
-      {
-        printf("Query block is too big for this implementation! %d %d %d\n",
-        bitvectors_for_intersect.size() * base_ptr->bitvector_size,
-        bitvectors_for_intersect.size(),
-        base_ptr->bitvector_size);
-        return;
-      }
-      // todo generate block of queires
       memcpy(countListPtr, bitvectors_for_intersect.data(), bitvectors_for_intersect.size() * sizeof(unsigned long long*));
 
-     cudaDeviceSynchronize();
+      cudaDeviceSynchronize();
 
-     cudaCallBlockCount(
-      	65535, //todo
-      	1024, //threads per block
+      cudaCallBlockCount(
+      	65535, //device limit, not used
+      	1024, //device limit, not used
       	base_ptr->bitvector_size, // word count
         bitvectors_for_intersect.size() / configCount, // state count
         configCount, // config count
-      	countListPtr, // gridPtr
-        reduce, // result
+      	countListPtr, // pointer to bitvector pointers
+        reduce, // results array
       	0);
 
        cudaDeviceSynchronize();
 
        for(int c = 0; c < configCount; c++){
+  //       printf("%d: %llu\n", c, reduce[c]);
          F[0](reduce[c],c);
        }
     }
@@ -212,9 +204,6 @@ GPUCounter<N> create_GPUCounter(int n, int m, Iter it) {
   int database_size = sizeof(typename GPUCounter<N>::base) + n * sizeof(typename GPUCounter<N>::node) + bitvector_count * bitvector_size * sizeof(uint64_t);
 
   cudaMallocManaged(&p.base_ptr, database_size);
-
-  //p.base_ptr = (typename GPUCounter<N>::base *) new char[database_size]; // gpu malloc
-
   char* zero_ptr = (char*) p.base_ptr;
   for(int i = 0; i < database_size; i++) {
     zero_ptr[i] = 0;
@@ -256,7 +245,7 @@ GPUCounter<N> create_GPUCounter(int n, int m, Iter it) {
   }
 
   cudaMallocManaged(&p.reduce, p.base_ptr->bitvector_size * sizeof(unsigned long long));
-  cudaMallocManaged(&p.countListPtr, sizeof(unsigned long long*) * 2048); // 2048 bit vectors per query block
+  cudaMallocManaged(&p.countListPtr, sizeof(unsigned long long*) * 1024);
 
   return p;
 } // create_GPUCounter

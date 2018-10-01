@@ -4,7 +4,7 @@ COMMAND LINE ARGUMENTS
 
   "-data=<path>":       the path to the database file
   "-query=<path>":      the path to the query parameters file
-  "-i=<iterations>":    specify the number of iterations 
+  "-i=<iterations>":    specify the number of iterations
 
 */
 
@@ -32,7 +32,7 @@ struct call {
     void operator()(int) {}
 
     void operator()(int Nijk, int i) {
-//      std::cout << "call from bvc: " << i << " " << Nijk << std::endl;
+  //    std::cout << "call from bvc: " << i << " " << Nijk << std::endl;
       nijk = Nijk;
     } // operator()
 
@@ -52,13 +52,15 @@ int main(int argc, char *argv[]) {
   std::vector<char> D;
   std::vector<state> states;
   int n = 0;
-
+  printf("starting...\n");
   int iterations = 1;
   bool stateQuery = false;
   char *filePath = 0;
   char *queryPath = 0;
 
   getCmdLineArgumentString(argc, (const char **) argv, "data", &filePath);
+
+  printf("loading data: %s...\n", filePath);
 
   if (0 != filePath) {
     n = loadDatabase(filePath, D);
@@ -69,6 +71,7 @@ int main(int argc, char *argv[]) {
 
   getCmdLineArgumentString(argc, (const char **) argv, "query", &queryPath);
 
+  printf("loading query: %s...\n", queryPath);
   if (0 != queryPath) {
     stateQuery = loadQuery(queryPath, states);
   }
@@ -126,6 +129,8 @@ bool runTest( std::vector<char>& D, std::vector<state> states, int n, bool state
   std::vector<std::chrono::duration<double>> times;
   std::vector<std::chrono::duration<double>> gpuTimes;
 
+
+  printf("cpu...\n");
   // cpu runs...
   for(int i = 0; i < iterations; i++) {
     auto t1 = std::chrono::system_clock::now();
@@ -140,14 +145,15 @@ bool runTest( std::vector<char>& D, std::vector<state> states, int n, bool state
     times.push_back(elapsed_cpu);
   }
 
+  printf("gpu...\n");
   // gpu runs...
   for(int i = 0; i < iterations; i++) {
     auto t1 = std::chrono::system_clock::now();
     if(stateQuery) {
-      gpuc.apply(xi, pa, sxi, spa, CCpu);
+      gpuc.apply(xi, pa, sxi, spa, CGpu);
     }
     else{
-      gpuc.apply(xi, pa, CCpu);
+      gpuc.apply(xi, pa, CGpu);
     }
     auto t2 = std::chrono::system_clock::now();
     auto elapsed_cpu = std::chrono::duration<double>(t2 - t1);
@@ -174,6 +180,8 @@ bool runTest( std::vector<char>& D, std::vector<state> states, int n, bool state
 
   printf("cpu avg=%lf max=%lf\n", average, max);
 
+  total = 0;
+  max = 0;
   for(int i = 0; i < iterations; i++)
   {
     if(gpuTimes[i].count() > max){
@@ -185,15 +193,15 @@ bool runTest( std::vector<char>& D, std::vector<state> states, int n, bool state
 
   average = total / iterations;
 
-  for(int index = 0; index < CCpu.size(); index++){
-    printf("gpu score %d\n", CCpu[index].score());
+  for(int index = 0; index < CGpu.size(); index++){
+    printf("gpu score %d\n", CGpu[index].score());
   }
 
   printf("gpu avg=%lf max=%lf\n", average, max);
   return true;
 }
 
-static const int MAX_DATA_PER_LINE = 2048 * 16;
+static const int MAX_DATA_PER_LINE = 2048 * 64;
 
 int loadDatabase(const char* pFile, std::vector<char> &pDatabase) {
   int variableCount = 0;
@@ -211,6 +219,7 @@ int loadDatabase(const char* pFile, std::vector<char> &pDatabase) {
   pDatabase.clear();
 
   while (!done) {
+    printf(".");
     inFile.getline(inputArray, MAX_DATA_PER_LINE);
     int len = strlen(inputArray);
 
