@@ -32,7 +32,6 @@ struct call {
     void operator()(int) {}
 
     void operator()(int Nijk, int i) {
-  //    std::cout << "call from bvc: " << i << " " << Nijk << std::endl;
       nijk = Nijk;
     } // operator()
 

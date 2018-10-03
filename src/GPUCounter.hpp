@@ -126,13 +126,13 @@ public:
       cudaDeviceSynchronize();
 
       cudaCallBlockCount(
-      	65535, //max blocks per device
-      	1024, //max threads per block
+      	65535, //device limit, not used
+      	1024, //device limit, not used
       	base_ptr->bitvector_size, // word count
         bitvectors_for_intersect.size() / configCount, // state count
         configCount, // config count
-      	countListPtr, // gridPtr
-        reduce, // result
+      	countListPtr, // pointer to bitvector pointers
+        reduce, // results array
       	0);
 
        cudaDeviceSynchronize();
