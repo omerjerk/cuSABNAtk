@@ -27,6 +27,7 @@ template <class T, unsigned int blockSize, bool nIsPow2>
 __global__ void
 counts(const T **g_idata,
   T *g_odata,
+  T *g_rdata,
   unsigned int words_per_vector,
   const int vectors_per_config,
   const int configs_per_query)
@@ -36,21 +37,27 @@ counts(const T **g_idata,
   unsigned int tid = threadIdx.x;
   unsigned int i = blockIdx.x*blockSize + threadIdx.x;
   unsigned int vector_index = vectors_per_config * blockIdx.x;
-  unsigned int word_index = i%blockSize;
+  unsigned int word_index = i%blockSize; // cant this be tid
+  unsigned int result_index = blockIdx.x * words_per_vector + tid;
 
   T mySum = 0;
-
   T localState = g_idata[vector_index][word_index]; // first word slice of config
 
-     // running sum for all word slices
+  //printf("%d %d %d %d %d\n", result_index, tid, blockIdx.x, blockSize, words_per_vector);
+
+  // running sum for all word slices
   for(int p = 1; p < vectors_per_config; p++)
   {
     localState = localState & g_idata[vector_index + p][word_index];
   }
 
+  if(g_rdata != 0){ // todo can be compile time decision
+    g_rdata[result_index] = localState;
+  }
+
   mySum += __popcll(localState);
 
-    // ensure we don't read out of bounds -- this is optimized away for powerOf2 sized arrays
+  // ensure we don't read out of bounds -- this is optimized away for powerOf2 sized arrays
   if (nIsPow2 || (tid + blockSize < words_per_vector) )
   {
     unsigned int word_index_upper_half = word_index + blockSize;
@@ -60,6 +67,13 @@ counts(const T **g_idata,
     {
       localState = localState & g_idata[vector_index + p][word_index_upper_half];
     }
+
+    if(g_rdata != 0){ // todo can be compile time decision
+      g_rdata[result_index + blockSize] = localState;
+    }
+
+//    printf("%d %d %d %d %d\n", result_index + blockSize, tid, blockIdx.x, blockSize, words_per_vector);
+
     mySum += __popcll(localState);
   }
 
@@ -178,8 +192,8 @@ void cudaCallBlockCount(
   const uint vectors_per_config,
   const uint configs_per_query,
   const unsigned long long** bvectorsPtr,
-  unsigned long long*results,
-  unsigned long long*states) {
+  unsigned long long* results,
+  unsigned long long* states) {
 
     int threads = nextPow2((words_per_vector + 1)/ 2);
 
@@ -187,49 +201,48 @@ void cudaCallBlockCount(
     dim3 dimGrid(configs_per_query, 1, 1);
     int smemSize = (threads <= 32) ? 2 * threads * sizeof(unsigned long long) : threads * sizeof(unsigned long long);
 
-    // debug setup for alarm data
-    if (isPow2(words_per_vector)) // optimize out non pwr of 2 logic
+    if (isPow2(words_per_vector) && (words_per_vector > 1)) // optimize out non pwr of 2 logic
     {
       switch (threads)
       {
         case 512:
-        counts<unsigned long long, 512, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 512, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 256:
-        counts<unsigned long long, 256, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 256, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 128:
-        counts<unsigned long long, 128, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 128, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 64:
-        counts<unsigned long long, 64, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 64, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 32:
-        counts<unsigned long long, 32, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 32, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 16:
-        counts<unsigned long long, 16, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 16, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 8:
-        counts<unsigned long long, 8, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 8, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 4:
-        counts<unsigned long long, 4, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 4, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 2:
-        counts<unsigned long long, 2, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 2, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 1:
-        counts<unsigned long long, 1, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 1, true><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
       }
     }
@@ -238,43 +251,43 @@ void cudaCallBlockCount(
       switch (threads)
       {
         case 512:
-        counts<unsigned long long, 512, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 512, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 256:
-        counts<unsigned long long, 256, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 256, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 128:
-        counts<unsigned long long, 128, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 128, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 64:
-        counts<unsigned long long, 64, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 64, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 32:
-        counts<unsigned long long, 32, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 32, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 16:
-        counts<unsigned long long, 16, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 16, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 8:
-        counts<unsigned long long, 8, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 8, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 4:
-        counts<unsigned long long, 4, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 4, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 2:
-        counts<unsigned long long, 2, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 2, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
 
         case 1:
-        counts<unsigned long long, 1, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
+        counts<unsigned long long, 1, false><<< dimGrid, dimBlock, smemSize >>>(bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query); //words, bvs/config, configs per query
         break;
       }
     }

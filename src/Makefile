@@ -4,11 +4,12 @@ TARGETDIR=../bin
 COUNT=count
 all: count resources
 
-count: query.cpp 
+count: query.cpp GPUCounter.hpp
+	rm -f *.o
 	$(CXX) -c *.cu
 	$(CXX) $(CXXFLAGS)  query.cpp gpu_util.o -o  $@
 
-resources: 
+resources:
 	@cp $(COUNT) $(TARGETDIR)/
 
 cuda: gpu_util.cu

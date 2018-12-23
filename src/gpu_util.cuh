@@ -16,7 +16,7 @@ void cudaCallBlockCount(
   const uint vectors_per_config,
   const uint configs_per_query,
 	const unsigned long long** bvectorsPtr,
-  unsigned long long*results,
-	unsigned long long*states);
+  unsigned long long* results,
+	unsigned long long* intermediateStatesPtr);
 
 #endif

@@ -68,7 +68,6 @@ int main(int argc, char *argv[]) {
   std::vector<char> D;
   std::vector<state> states;
   int n = 0;
-  printf("starting...\n");
   int iterations = 1;
   bool stateQuery = false;
   char *filePath = 0;
@@ -90,6 +89,12 @@ int main(int argc, char *argv[]) {
   printf("loading query: %s...\n", queryPath);
   if (0 != queryPath) {
     stateQuery = loadQuery(queryPath, states);
+  } else {
+    // default query
+    states.push_back(state{0,0});
+    states.push_back(state{1,0});
+    states.push_back(state{2,0});
+    stateQuery = false;
   }
 
   if (checkCmdLineFlag(argc, (const char **) argv, "i")) {
@@ -113,17 +118,22 @@ int main(int argc, char *argv[]) {
 
   if(!verbose)
   {
+    // running for timing. Run verbose once to verify correctness
     switch (words) {
       case 1:
+        runTest<1>(D, states, n, stateQuery, 1, CV);
         runTest<1>(D, states, n, stateQuery, iterations, C);
         break;
       case 2:
+        runTest<2>(D, states, n, stateQuery, 1, CV);
         runTest<2>(D, states, n, stateQuery, iterations, C);
         break;
       case 3:
+        runTest<3>(D, states, n, stateQuery, 1, CV);
         runTest<3>(D, states, n, stateQuery, iterations, C);
         break;
       case 4:
+        runTest<4>(D, states, n, stateQuery, 1, CV);
         runTest<4>(D, states, n, stateQuery, iterations, C);
         break;
       // ... todo add more to accomadate larger data sets ...
@@ -203,6 +213,10 @@ bool runTest(std::vector<char>& D,
     times.push_back(elapsed_cpu);
   }
 
+  for(int index = 0; index < F.size(); index++){
+    printf("cpu score %d\n", F[index].score());
+  }
+
   printf("gpu...\n");
   // gpu runs...
   for(int i = 0; i < iterations; i++) {
@@ -218,8 +232,8 @@ bool runTest(std::vector<char>& D,
     gpuTimes.push_back(elapsed_cpu);
   }
 
-  double total = 0;
-  double max = 0;
+  double total = 0.0;
+  double max = 0.0;
 
   for(int i = 0; i < iterations; i++)
   {
@@ -232,14 +246,10 @@ bool runTest(std::vector<char>& D,
 
   double average = total / iterations;
 
-  for(int index = 0; index < F.size(); index++){
-    printf("cpu score %d\n", F[index].score());
-  }
-
   printf("cpu avg=%lf max=%lf\n", average, max);
 
-  total = 0;
-  max = 0;
+  total = 0.0;
+  max = 0.0;
   for(int i = 0; i < iterations; i++)
   {
     if(gpuTimes[i].count() > max){
