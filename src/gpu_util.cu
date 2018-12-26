@@ -43,8 +43,6 @@ counts(const T **g_idata,
   T mySum = 0;
   T localState = g_idata[vector_index][word_index]; // first word slice of config
 
-  //printf("%d %d %d %d %d\n", result_index, tid, blockIdx.x, blockSize, words_per_vector);
-
   // running sum for all word slices
   for(int p = 1; p < vectors_per_config; p++)
   {
@@ -71,8 +69,6 @@ counts(const T **g_idata,
     if(g_rdata != 0){ // todo can be compile time decision
       g_rdata[result_index + blockSize] = localState;
     }
-
-//    printf("%d %d %d %d %d\n", result_index + blockSize, tid, blockIdx.x, blockSize, words_per_vector);
 
     mySum += __popcll(localState);
   }
@@ -195,6 +191,7 @@ void cudaCallBlockCount(
   unsigned long long* results,
   unsigned long long* states) {
 
+    cudaDeviceSynchronize();
     int threads = nextPow2((words_per_vector + 1)/ 2);
 
     dim3 dimBlock(threads, 1, 1);
@@ -291,4 +288,5 @@ void cudaCallBlockCount(
         break;
       }
     }
+    cudaDeviceSynchronize();
   }
