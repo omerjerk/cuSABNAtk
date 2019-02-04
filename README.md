@@ -1,3 +1,3 @@
-# gpu-counter
+# cuSABNAtk
 
-This is a gpu based implementation of a bit vector query counter.
+CUDA-based implementation of SABNAtk.
