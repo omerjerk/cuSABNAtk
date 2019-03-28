@@ -5,7 +5,8 @@
  *    Created: Oct 22, 2016
  *
  *    Authors: Marc Greenbaum <marcgree@buffalo.edu>
- *    Copyright (c) 2015-2018 SCoRe Group http://www.score-group.org/
+ *             Mohammad Umair <m39@buffalo.edu>
+ *    Copyright (c) 2015-2019 SCoRe Group http://www.score-group.org/
  *    Distributed under the MIT License.
  *    See accompanying file LICENSE.
  */
@@ -22,21 +23,20 @@
 #include "bit_util.hpp"
 #include "gpu_util.cuh"
 
-
+//TODO: check if these should be hardware dependent
 static const int MAX_COUNTS_PER_QUERY = 64;
 static const int MAX_INTERMEDIATE_RESULTS = 128;
 
 
 struct ResultRecord {
     unsigned long long mCount;
-    unsigned long long* mResultPtr;
+    uint64_t* mResultPtr;
 }; // struct ResultRecord
 
 
 template <int N> class GPUCounter {
 public:
     typedef uint_type<N> set_type;
-    typedef uint8_t data_type;
 
     int n() const { return base_->n_; }
 
@@ -46,9 +46,9 @@ public:
 
     bool is_reorderable() { return false; }
 
+    // FIXME: consider cases when |xa_vect| is greater than 1
     template <typename score_functor>
     void apply(const set_type &xi, const set_type &pa, std::vector<score_functor> &F) const {
-        std::vector<int> nodeList;
         int activeRoundTwoCount = 0;
 
         std::vector<uint64_t*> bitvectorsForIntersect;
@@ -58,14 +58,15 @@ public:
         auto pa_vect = as_vector(pa);
 
         // build node list
+        std::vector<int> nodeList;
         nodeList.push_back(r(xa_vect[0]));
         for (int i = 0; i < pa_vect.size(); i++) {
-            xa_vect.push_back(pa_vect[i]);
             nodeList.push_back(r(pa_vect[i]));
         }
 
         // initialize task enumerator
         int configCount = 1;
+        // FIXME: this should be either dynamic or should be documented
         TaskEnumerator te(nodeList, 6);
         int roundOneGroupCount = te.getRoundOneGroupCount();
         int previousGroupCount = roundOneGroupCount;
@@ -85,13 +86,13 @@ public:
                 // build each sub group query
                 for (int j = 0; j < nextTask.size(); ++j) {
                     if (nextTask[j].mActive){
-                        uint64_t* bv_ptr = this->getBvPtr(nextTask[j].mNode,nextTask[j].mState);
+                        uint64_t* bv_ptr = this->m_getBvPtr__(nextTask[j].mNode,nextTask[j].mState);
                         bitvectorsForIntersect.push_back(bv_ptr);
                     }
                 }
             }
 
-            unsigned long long* intermediateStatesRoundPtr =
+            uint64_t* intermediateStatesRoundPtr =
                 (intermediateResultsPtr_ + subGroup * previousGroupCount * base_->bitvectorSize_);
 
             m_copyBvListToDevice__(bitvectorsForIntersect);
@@ -151,7 +152,7 @@ public:
         // execute callback for all non zero results
         int resultCount = subGroup > 1 ? activeRoundTwoCount : te.getTaskCount();
         for (int i = 0; i < resultCount; ++i) {
-            if(resultList_[i] > 0) F[0](resultList_[i], i);
+            if (resultList_[i] > 0) F[0](resultList_[i], i);
         }
 
     } // end apply - non zero
@@ -192,9 +193,9 @@ private:
     node* nodeList_;
     int maxNodesPerTask_ = 6;
 
-    unsigned long long* resultList_;
-    const unsigned long long** countListPtr_; // copy address list into gpu memory
-    unsigned long long* intermediateResultsPtr_; // intermediate results list in gpu memory
+    uint64_t* resultList_;
+    const uint64_t** countListPtr_; // copy address list into gpu memory
+    uint64_t* intermediateResultsPtr_; // intermediate results list in gpu memory
 
     template <int M, typename Iter>
     friend GPUCounter<M> create_GPUCounter(int, int, Iter);
@@ -214,7 +215,8 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     // FIXME: this is not really portable (64 should be replaced with sizeof)
     int bitvectorSize_InWords = static_cast<int>((m + 63) / 64);
 
-    typename GPUCounter<N>::base temp_base = {n, m, bitvectorSize_InWords, 0};
+    // TODO: figure out why we need temp_base
+    typename GPUCounter<N>::base temp_base = {n, m, bitvectorSize_InWords, nullptr};
     temp_base.nodeList_ = new typename GPUCounter<N>::node[n];
 
     // determine |ri| of each Xi
@@ -270,16 +272,18 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
         }
 
         int bvsSize = p.base_->nodeList_[xi].r_ * bitvectorSize_InWords * sizeof(uint64_t);
+        // FIXME: can have only one memcpy operation
         cudaMemcpy(p.base_->nodeList_[xi].bitvectors, tempBvsPtr, bvsSize, cudaMemcpyHostToDevice);
         delete[] tempBvsPtr;
     }
 
-    cudaMallocManaged(&p.resultList_, p.base_->bitvectorSize_ * sizeof(unsigned long long) * MAX_COUNTS_PER_QUERY);
-    cudaMallocManaged(&p.countListPtr_, sizeof(unsigned long long*) * 256);
+    cudaMallocManaged(&p.resultList_, p.base_->bitvectorSize_ * sizeof(uint64_t) * MAX_COUNTS_PER_QUERY);
+    // TODO: should this 256 be connected to ri
+    cudaMallocManaged(&p.countListPtr_, sizeof(uint64_t*) * 256);
 
-    cudaMalloc(&p.intermediateResultsPtr_, p.base_->bitvectorSize_ * sizeof(unsigned long long) * MAX_INTERMEDIATE_RESULTS);
+    cudaMalloc(&p.intermediateResultsPtr_, p.base_->bitvectorSize_ * sizeof(uint64_t) * MAX_INTERMEDIATE_RESULTS);
 
-    cudaMemset(p.intermediateResultsPtr_, 0, p.base_->bitvectorSize_ * sizeof(unsigned long long) * MAX_INTERMEDIATE_RESULTS);
+    cudaMemset(p.intermediateResultsPtr_, 0, p.base_->bitvectorSize_ * sizeof(uint64_t) * MAX_INTERMEDIATE_RESULTS);
 
     cudaDeviceSynchronize();
 

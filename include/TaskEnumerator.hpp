@@ -1,3 +1,16 @@
+/***
+ *    $Id$
+ **
+ *    File: TaskEnumaerator.hpp
+ *    Created: Jan 15, 2019
+ *
+ *    Authors: Marc Greenbaum <marcgree@buffalo.edu>
+ *             Mohammad Umair <m39@buffalo.edu>
+ *    Copyright (c) 2018-2019 SCoRe Group http://www.score-group.org/
+ *    Distributed under the MIT License.
+ *    See accompanying file LICENSE.
+ */
+
 class TaskEnumerator
 {
 public:
