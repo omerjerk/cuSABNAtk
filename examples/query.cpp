@@ -26,9 +26,7 @@ struct Call {
 int main(int argc, char* argv[]) {
     jaz::Logger Log;
 
-    int N = 2;
-
-    if (argc != 3) {
+    if (argc != 2) {
         std::cout << "usage: " << argv[0] << " data_file query_file" << std::endl;
         return 0;
     }
@@ -56,7 +54,7 @@ int main(int argc, char* argv[]) {
     auto pa = set_empty<set_type>();
     xi = set_add(xi, 98);
 
-    std::vector<int> paVec = {9, 71, 40, 39, 43, 82, 85, 20, 66, 52};
+    std::vector<int> paVec = {71, 40, 39, 43, 82, 85, 20, 66, 52};
     for (int i = 0; i < paVec.size(); ++i) {
         pa = set_add(pa, paVec[i]);
     }
