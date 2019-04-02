@@ -277,7 +277,7 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
         delete[] tempBvsPtr;
     }
 
-    cudaMallocManaged(&p.resultList_, p.base_->bitvectorSize_ * sizeof(uint64_t) * MAX_COUNTS_PER_QUERY);
+    cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY);
     // TODO: should this 256 be connected to ri
     cudaMallocManaged(&p.countListPtr_, sizeof(uint64_t*) * 256);
 
