@@ -63,13 +63,14 @@ template <class T, unsigned int blockSize, bool nIsPow2>
 __global__ void counts(const T** g_idata,
                        T* g_odata,
                        T* g_rdata,
-                       unsigned int words_per_vector,
-                       const int vectors_per_config,
-                       const int configs_per_query) {
+                       unsigned int words_per_vector, //m/64
+                       const int vectors_per_config, //number of variables in a query
+                       const int configs_per_query /* number of configs*/) {
     T* sdata = SharedMemory<T>();
 
     unsigned int tid = threadIdx.x;
     unsigned int i = blockIdx.x * blockSize + threadIdx.x;
+    //the query vectors we are interested in for current tid
     unsigned int vector_index = vectors_per_config * blockIdx.x;
     unsigned int word_index = i % blockSize; // cant this be tid
     unsigned int result_index = blockIdx.x * words_per_vector + tid;
