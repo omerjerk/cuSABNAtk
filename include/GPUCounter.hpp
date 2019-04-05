@@ -215,9 +215,11 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     // FIXME: this is not really portable (64 should be replaced with sizeof)
     int bitvectorSize_InWords = static_cast<int>((m + 63) / 64);
 
-    // TODO: figure out why we need temp_base
-    typename GPUCounter<N>::base temp_base = {n, m, bitvectorSize_InWords, nullptr};
-    temp_base.nodeList_ = new typename GPUCounter<N>::node[n];
+    p.base_ = new typename GPUCounter<N>::base;
+    p.base_->n_ = n;
+    p.base_->m_ = m;
+    p.base_->bitvectorSize_ = bitvectorSize_InWords;
+    p.base_->nodeList_ = new typename GPUCounter<N>::node[n];
 
     // determine |ri| of each Xi
     for (int xi = 0; xi < n; ++xi) {
@@ -231,25 +233,14 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
             }
         }
 
-        temp_base.nodeList_[xi].r_ = size;
+        p.base_->nodeList_[xi].r_ = size;
         bitvectorCount += size;
     }
 
-    int adminBlockSize = sizeof(typename GPUCounter<N>::base) + n * sizeof(typename GPUCounter<N>::node);
     int bitvectorWordCount = bitvectorCount * bitvectorSize_InWords;
-
-    p.base_ = (typename GPUCounter<N>::base*) new char[adminBlockSize];
-    std::memset(p.base_, 0, adminBlockSize);
 
     uint64_t* bvPtr;
     cudaMalloc(&bvPtr, sizeof(uint64_t) * bitvectorWordCount);
-
-    // copy base and node list to GPUCounter
-    std::memcpy(p.base_, &temp_base, sizeof(typename GPUCounter<N>::base));
-    std::memcpy(reinterpret_cast<char*>(p.base_) + sizeof(typename GPUCounter<N>::base), temp_base.nodeList_, n * sizeof(typename GPUCounter<N>::node));
-    p.base_->nodeList_ = reinterpret_cast<typename GPUCounter<N>::node*>(reinterpret_cast<char*>(p.base_) + sizeof(typename GPUCounter<N>::base));
-
-    delete[] temp_base.nodeList_;
 
     // set bitvector addresses (device addrs) in node list (host mem)
     int offset = 0;
