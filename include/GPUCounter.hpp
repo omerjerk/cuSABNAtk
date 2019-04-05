@@ -250,23 +250,21 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     }
 
     // build bitvectors for each Xi and copy into device
+    uint64_t* tempBvPtr = new uint64_t[bitvectorWordCount];
+    std::fill_n(tempBvPtr, bitvectorWordCount, 0);
     temp_it = it;
+    offset = 0;
     for (int xi = 0; xi < n; ++xi) {
-        uint64_t* tempBvsPtr = new uint64_t[p.base_->nodeList_[xi].r_ * bitvectorSize_InWords];
-        std::fill_n(tempBvsPtr, p.base_->nodeList_[xi].r_ * bitvectorSize_InWords, 0);
-
         for (int j = 0; j < m; ++j) {
             temp = *temp_it++;
             int bv_index = temp;
-            uint64_t& bitvector = tempBvsPtr[bv_index * bitvectorSize_InWords + (j >> 6)]; // find the block
+            uint64_t& bitvector = tempBvPtr[offset + (bv_index * bitvectorSize_InWords + (j >> 6))]; // find the block
             bitvector |= (1L << (j & 63)); // set the bit
         }
-
-        int bvsSize = p.base_->nodeList_[xi].r_ * bitvectorSize_InWords * sizeof(uint64_t);
-        // FIXME: can have only one memcpy operation
-        cudaMemcpy(p.base_->nodeList_[xi].bitvectors, tempBvsPtr, bvsSize, cudaMemcpyHostToDevice);
-        delete[] tempBvsPtr;
+        offset += p.base_->nodeList_[xi].r_ * bitvectorSize_InWords;
     }
+    cudaMemcpy(p.base_->nodeList_[0].bitvectors, tempBvPtr, bitvectorWordCount, cudaMemcpyHostToDevice);
+    delete[] tempBvPtr;
 
     //expected size = (number of configurations in the query) * sizeof(uint64_t)
     cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY);
