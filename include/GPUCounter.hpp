@@ -158,6 +158,8 @@ public:
     } // end apply - non zero
 
 private:
+    //given the variable number and its state, this function returns the GPU address
+    //where that particular bitvector starts
     uint64_t* m_getBvPtr__(int pNode, int pState) const {
         uint64_t* resultPtr = 0;
         if(pNode < n() && pState < r(pNode)) {
@@ -190,12 +192,20 @@ private:
 
 
     base* base_;
+    //contains GPU memory addresses where each particular value of xi starts
     node* nodeList_;
     int maxNodesPerTask_ = 6;
 
+    //results of each configuration of the given query
     uint64_t* resultList_;
-    const uint64_t** countListPtr_; // copy address list into gpu memory
-    uint64_t* intermediateResultsPtr_; // intermediate results list in gpu memory
+    //2-d array of GPU addresses
+    //each row represents a configuration
+    //each column of a row is the address where the bitvector for a particular value of xi starts in the GPU memory
+    const uint64_t** countListPtr_;
+    //intermediate results of a part of query
+    //intermediate results of multiple rounds are ANDed to generate the final result
+    //this isn't used in case there is only one round
+    uint64_t* intermediateResultsPtr_;
 
     template <int M, typename Iter>
     friend GPUCounter<M> create_GPUCounter(int, int, Iter);
