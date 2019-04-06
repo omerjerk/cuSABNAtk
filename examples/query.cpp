@@ -18,6 +18,7 @@ struct Call {
 
     void operator()(int Nijk, int i) {
       nijk = Nijk;
+      printf("%d %d\n", nijk, i);
     }
 
     int score() const { return nijk; }
@@ -31,19 +32,15 @@ std::tuple<bool, std::vector<int>, std::vector<int>> read_query(std::string quer
     if (!infile) {
         return std::make_tuple(false, pa, xi);
     }
-    std::string line;
-    std::getline(infile, line);
-    std::vector<std::string> tokens = split(line, " ");
-    int paCount = stoi(tokens[0]);
+    int paCount, xiCount, temp;
+    infile>>paCount;
     for (int i = 1; i <= paCount; ++i) {
-        pa.push_back(stoi(tokens[i]));
+        infile>>temp;
+        pa.push_back(temp);
     }
-    
-    std::getline(infile, line);
-    tokens = split(line, " ");
-    int xiCount = stoi(tokens[0]);
+    infile>>xiCount;
     for (int i = 1; i <= xiCount; ++i) {
-        xi.push_back(stoi(tokens[i]));
+        xi.push_back(xiCount);
     }
     return std::make_tuple(true, pa, xi);
 }

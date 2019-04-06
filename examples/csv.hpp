@@ -70,17 +70,4 @@ std::tuple<bool, int, int> read_csv(const std::string& name, std::vector<T>& dat
     return read_csv(f, data);
 } // read_csv
 
-std::vector<std::string> split(std::string s, std::string delimiter) {
-    std::vector<std::string> list;
-    size_t pos = 0;
-    std::string token;
-    while ((pos = s.find(delimiter)) != std::string::npos) {
-        token = s.substr(0, pos);
-        list.push_back(token);
-        s.erase(0, pos + delimiter.length());
-    }
-    list.push_back(s);
-    return list;
-}
-
 #endif // CSV_HPP
