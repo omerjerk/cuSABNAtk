@@ -11,7 +11,7 @@
 #include "GPUCounter.hpp"
 #include "csv.hpp"
 
-#define QUERY_TEST_COUNT 500
+#define QUERY_TEST_COUNT 1000
 
 struct Call {
     void init(int, int) { nijk = 0; }
@@ -88,7 +88,7 @@ int main(int argc, char* argv[]) {
 
     std::tie(b, n, m) = read_csv(csv_name, D);
 
-    if (b == false) {
+    if (!b) {
         Log.error() << "could not read input data" << std::endl;
         return -1;
     }
@@ -117,7 +117,7 @@ int main(int argc, char* argv[]) {
                 time += std::chrono::duration<double>(t1 - t0).count();
             }
         }
-        printf("Time for %d queries with %d variables = %f", QUERY_TEST_COUNT, nq, time);
+        printf("Time for %d queries with %d variables = %f\n", QUERY_TEST_COUNT, nq, time);
     } else {
         //execute the query
         std::vector<int> paVec;
