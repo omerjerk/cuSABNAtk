@@ -50,6 +50,10 @@ public:
     template <typename score_functor>
     void apply(const set_type &xi, const set_type &pa, std::vector<score_functor> &F) const {
         int activeRoundTwoCount = 0;
+        long maxConfigCount = 1;
+        std::vector<uint64_t> arities;
+        std::vector<uint64_t> aritiesPrefix;
+        aritiesPrefix.push_back(1);
 
         std::vector<uint64_t*> bitvectorsForIntersect;
         std::vector<ResultRecord> resultList;
@@ -60,9 +64,16 @@ public:
         // build node list
         std::vector<int> nodeList;
         nodeList.push_back(r(xa_vect[0]));
+        arities.push_back(r(xa_vect[0]));
+        long arity;
         for (int i = 0; i < pa_vect.size(); i++) {
-            nodeList.push_back(r(pa_vect[i]));
+            arity = r(pa_vect[i]);
+            nodeList.push_back(arity);
+            arities.push_back(arity);
+            aritiesPrefix.push_back(aritiesPrefix[i]*arities[i]);
         }
+
+        m_copyAritiesToDevice(arities, aritiesPrefix);
 
         // initialize task enumerator
         int configCount = 1;
@@ -74,11 +85,12 @@ public:
         int subGroup = 0;
 
         // execute round one
-        while (roundOneGroupCount != 1) {
+        // while (roundOneGroupCount != 1) {
             bitvectorsForIntersect.clear();
             std::vector<TaskEnumerator::NodeState> nextTask;
 
             // build round one sub groups
+            /*
             for (int i = 0; i < roundOneGroupCount; ++i) {
                 nextTask = te.next1();
                 tl.push_back(nextTask);
@@ -86,39 +98,65 @@ public:
                 // build each sub group query
                 for (int j = 0; j < nextTask.size(); ++j) {
                     if (nextTask[j].mActive){
-                        uint64_t* bv_ptr = this->m_getBvPtr__(nextTask[j].mNode,nextTask[j].mState);
+                        uint64_t* bv_ptr = this->m_getBvPtr__(nextTask[j].mNode, nextTask[j].mState);
                         bitvectorsForIntersect.push_back(bv_ptr);
                     }
-                }
-            }
+                    // printf("%d ", nextTask[j].mState);
+                } //printf("\n");
+            }*/
 
-            uint64_t* intermediateStatesRoundPtr =
-                (intermediateResultsPtr_ + subGroup * previousGroupCount * base_->bitvectorSize_);
+            // uint64_t* intermediateStatesRoundPtr =
+                // (intermediateResultsPtr_ + subGroup * previousGroupCount * base_->bitvectorSize_);
 
-            m_copyBvListToDevice__(bitvectorsForIntersect);
+            // m_copyBvListToDevice__(bitvectorsForIntersect);
+
+            // for (int i = 0; i < arities.size(); ++i) {
+                // printf("%lu ", arities[i]);
+            // } printf("\n");
+
+            // for (int i = 0; i < arities.size(); ++i) {
+                // printf("%lu ", aritiesPrefix[i]);
+            // } printf("\n");
+/*
+            uint64_t* x[6];
+            int temp;
+            int offset = 0;
+            for (int j = 0; j < 64; ++j) {
+                offset = 0;
+                for (int i = 0; i < 6; ++i) {
+                    temp = ((j/aritiesPrefix[i]) % arities[i]);
+                    printf("%d ", temp);
+                    x[i] = base_->nodeList_[0].bitvectors + offset + (base_->bitvectorSize_ * temp);
+                    offset += arities[i] * base_->bitvectorSize_;
+                    uint64_t* y = this->m_getBvPtr__(i, temp);
+                    printf("%p %p\n", x[i], y);
+                } printf("\n");
+            }*/
 
             // call gpu kernel on each subgroup
             cudaCallBlockCount(
                                65535, // device limit, not used
                                1024, // device limit, not used
                                base_->bitvectorSize_, // word count
-                               bitvectorsForIntersect.size() / roundOneGroupCount, // state count
-                               roundOneGroupCount, // config count
-                               countListPtr_, // pointer to bitvector pointers
+                               6/*bitvectorsForIntersect.size() / roundOneGroupCount*/, // state count
+                               64/*roundOneGroupCount*/, // config count
+                               aritiesPtr_,
+                               aritiesPrefixPtr_,
+                               base_->nodeList_[0].bitvectors/*countListPtr_*/, // pointer to bitvector pointers
                                resultList_, // results array
-                               intermediateStatesRoundPtr); // start of intermediate results
+                               0); // start of intermediate results
 
             // add subgroup results to task list
-            for (int i = 0; i < roundOneGroupCount; ++i) {
-                ResultRecord tempResult{resultList_[i], intermediateStatesRoundPtr + i * base_->bitvectorSize_}; // intermediate result
+            for (int i = 0; i < 64; ++i) {
+                ResultRecord tempResult{resultList_[i], 0/*intermediateStatesRoundPtr + i * base_->bitvectorSize_*/}; // intermediate result
                 resultList.push_back(tempResult);
             }
 
             previousGroupCount = roundOneGroupCount;
             roundOneGroupCount = te.getRoundOneGroupCount();
             subGroup++;
-        }
-
+        // }
+/*
         if (subGroup > 1) {
             // Round two: execute all non-zero round 1 combinations
             activeRoundTwoCount = 0;
@@ -147,12 +185,14 @@ public:
                                countListPtr_, // pointer to bitvector pointers
                                resultList_, // results array
                                0); // no intermediate results
-        }
+        }*/
 
         // execute callback for all non zero results
-        int resultCount = subGroup > 1 ? activeRoundTwoCount : te.getTaskCount();
-        for (int i = 0; i < resultCount; ++i) {
-            if (resultList_[i] > 0) F[0](resultList_[i], i);
+        // int resultCount = subGroup > 1 ? activeRoundTwoCount : te.getTaskCount();
+        for (int i = 0; i < 64; ++i) {
+            if (resultList_[i] > 0) F[0](resultList_[i], i); else {
+                // printf("zero result\n");
+            }
         }
 
     } // end apply - non zero
@@ -173,6 +213,11 @@ private:
                pBitvectorsForIntersect.data(),
                pBitvectorsForIntersect.size() * sizeof(uint64_t*));
     } // m_copyBvListToDevice__
+
+    void m_copyAritiesToDevice(std::vector<uint64_t> pArities, std::vector<uint64_t> pAritiesPrefix) const {
+        cudaMemcpy(aritiesPtr_, pArities.data(), pArities.size() * sizeof(uint64_t), cudaMemcpyHostToDevice);
+        cudaMemcpy(aritiesPrefixPtr_, pAritiesPrefix.data(), pAritiesPrefix.size() * sizeof(uint64_t), cudaMemcpyHostToDevice);
+    }
 
     int m_bvSize__() const { return this->base_.bitvectorSize_; }
 
@@ -206,6 +251,8 @@ private:
     //intermediate results of multiple rounds are ANDed to generate the final result
     //this isn't used in case there is only one round
     uint64_t* intermediateResultsPtr_;
+    uint64_t* aritiesPtr_;
+    uint64_t* aritiesPrefixPtr_;
 
     template <int M, typename Iter>
     friend GPUCounter<M> create_GPUCounter(int, int, Iter);
@@ -284,6 +331,10 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     cudaMalloc(&p.intermediateResultsPtr_, p.base_->bitvectorSize_ * sizeof(uint64_t) * MAX_INTERMEDIATE_RESULTS);
 
     cudaMemset(p.intermediateResultsPtr_, 0, p.base_->bitvectorSize_ * sizeof(uint64_t) * MAX_INTERMEDIATE_RESULTS);
+
+    //TODO: define a more realistic size later
+    cudaMalloc(&p.aritiesPtr_, sizeof(uint64_t) * 256);
+    cudaMalloc(&p.aritiesPrefixPtr_, sizeof(uint64_t) * 256);
 
     cudaDeviceSynchronize();
 

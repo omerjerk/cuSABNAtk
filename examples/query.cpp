@@ -11,7 +11,7 @@
 #include "GPUCounter.hpp"
 #include "csv.hpp"
 
-#define QUERY_TEST_COUNT 1000
+#define QUERY_TEST_COUNT 500
 
 struct Call {
     void init(int, int) { nijk = 0; }
@@ -22,6 +22,7 @@ struct Call {
 
     void operator()(int Nijk, int i) {
       nijk = Nijk;
+      printf("%d %d\n", nijk, i);
     }
 
     int score() const { return nijk; }
