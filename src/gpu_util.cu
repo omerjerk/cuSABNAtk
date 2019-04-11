@@ -73,12 +73,10 @@ __global__ void counts(
 
     unsigned int tid = threadIdx.x;
     unsigned int i = blockIdx.x * blockSize + threadIdx.x;
-    //the query vectors we are interested in for current tid
-    unsigned int vector_index = vectors_per_config * blockIdx.x;
     unsigned int word_index = i % blockSize; // cant this be tid
     unsigned int result_index = blockIdx.x * words_per_vector + tid;
 
-    uint64_t* x[6];
+    uint64_t** x = new uint64_t*[vectors_per_config];
     int offset = 0;
     int temp = 0;
     for (int i = 0; i < vectors_per_config; ++i) {
