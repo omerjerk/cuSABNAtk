@@ -56,7 +56,7 @@ std::vector<std::vector<int>> get_benchmark_queries(int n, int nq) {
     }
     int seed = 100;
     auto start = variables.begin();
-    auto end = start + nq;
+    auto end = variables.end();
     std::vector<std::vector<int>> queries(QUERY_TEST_COUNT, std::vector<int>(nq));
     for (int i = 0; i < QUERY_TEST_COUNT; ++i) {
         shuffle(start, end, std::mt19937(seed));
@@ -112,11 +112,11 @@ int main(int argc, char* argv[]) {
             xi = set_add(xi, queries[i][0]);
             for (int j = 1; j < nq; ++j) {
                 pa = set_add(pa, queries[i][j]);
-                auto t0 = std::chrono::system_clock::now();
-                gcount.apply(xi, pa, F);
-                auto t1 = std::chrono::system_clock::now();
-                time += std::chrono::duration<double>(t1 - t0).count();
             }
+            auto t0 = std::chrono::system_clock::now();
+            gcount.apply(xi, pa, F);
+            auto t1 = std::chrono::system_clock::now();
+            time += std::chrono::duration<double>(t1 - t0).count();
         }
         printf("Time for %d queries with %d variables = %f\n", QUERY_TEST_COUNT, nq, time);
     } else {
