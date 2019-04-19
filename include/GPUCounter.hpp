@@ -24,7 +24,7 @@
 #include "gpu_util.cuh"
 
 //TODO: check if these should be hardware dependent
-static const int MAX_COUNTS_PER_QUERY = 64;
+static const int MAX_COUNTS_PER_QUERY = 1024;
 static const int MAX_INTERMEDIATE_RESULTS = 128;
 
 
