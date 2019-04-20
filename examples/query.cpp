@@ -88,6 +88,8 @@ int main(int argc, char* argv[]) {
 
     std::tie(b, n, m) = read_csv(csv_name, D);
 
+    printf("n = %d m = %d\n", n, m);
+
     if (!b) {
         Log.error() << "could not read input data" << std::endl;
         return -1;
