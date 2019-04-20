@@ -11,8 +11,6 @@
 #include "GPUCounter.hpp"
 #include "csv.hpp"
 
-#define QUERY_TEST_COUNT 500
-
 struct Call {
     void init(int, int) { nijk = 0; }
 
@@ -22,7 +20,7 @@ struct Call {
 
     void operator()(int Nijk, int i) {
       nijk = Nijk;
-      printf("%d %d\n", nijk, i);
+    //   printf("%d %d\n", nijk, i);
     }
 
     int score() const { return nijk; }
@@ -49,7 +47,7 @@ std::tuple<bool, std::vector<int>, std::vector<int>> read_query(std::string quer
     return std::make_tuple(true, pa, xi);
 }
 
-std::vector<std::vector<int>> get_benchmark_queries(int n, int nq) {
+std::vector<std::vector<int>> get_benchmark_queries(int n, int nt, int nq) {
     std::vector<int> variables(n);
     for (int i = 0; i < n; ++i) {
         variables[i] = i;
@@ -57,18 +55,19 @@ std::vector<std::vector<int>> get_benchmark_queries(int n, int nq) {
     int seed = 100;
     auto start = variables.begin();
     auto end = variables.end();
-    std::vector<std::vector<int>> queries(QUERY_TEST_COUNT, std::vector<int>(nq));
-    for (int i = 0; i < QUERY_TEST_COUNT; ++i) {
+    std::vector<std::vector<int>> queries(nt, std::vector<int>(nq));
+    for (int i = 0; i < nt; ++i) {
         shuffle(start, end, std::mt19937(seed));
         for (int j = 0; j < nq; ++j) {
             queries[i][j] = variables[j];
-        }
+            // printf("%d ", variables[j]);
+        } //printf("\n");
     }
     return queries;
 }
 
 int main(int argc, char* argv[]) {
-    using set_type = typename GPUCounter<2>::set_type;
+    using set_type = typename GPUCounter<3>::set_type;
     jaz::Logger Log;
 
     if (argc < 3) {
@@ -94,17 +93,21 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    GPUCounter<2> gcount = create_GPUCounter<2>(n, m, std::begin(D));
+    // printf("n = %d m = %d\n", n, m);
+
+    GPUCounter<3> gcount = create_GPUCounter<3>(n, m, std::begin(D));
 
     if (query_file.compare("benchmark") == 0) {
         //perform the benchmark
-        int nq = std::stoi(argv[3]);//number of variables in the query
+        int nt = std::stoi(argv[3]);//number of iterations
+        int nq = std::stoi(argv[4]);//number of variables in the query
         if (n < nq) {
             Log.error() << "Number of variables in query cannot be more than number of variables in the dataset" << std::endl;
+            return -1;
         }
         double time = 0;
         std::vector<Call> F(1);
-        auto queries = get_benchmark_queries(n, nq);
+        auto queries = get_benchmark_queries(n, nt, nq);
         for (int i = 0; i < queries.size(); ++i) {
             auto xi = set_empty<set_type>();
             auto pa = set_empty<set_type>();
@@ -118,7 +121,7 @@ int main(int argc, char* argv[]) {
             auto t1 = std::chrono::system_clock::now();
             time += std::chrono::duration<double>(t1 - t0).count();
         }
-        printf("Time for %d queries with %d variables = %f\n", QUERY_TEST_COUNT, nq, time);
+        printf("Time for %d queries with %d variables = %f\n", nt, nq, time);
     } else {
         //execute the query
         std::vector<int> paVec;

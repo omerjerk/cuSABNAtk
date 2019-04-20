@@ -63,13 +63,15 @@ public:
         long arity;
         for (int i = 0; i < pa_vect.size(); i++) {
             arity = r(pa_vect[i]);
+            // printf("arity = %ld\n", arity);
             arities.push_back(arity);
             aritiesPrefix.push_back(aritiesPrefix[i]*arities[i]);
         }
 
         m_copyAritiesToDevice(arities, aritiesPrefix);
-        
+
         long maxConfigCount = aritiesPrefix[aritiesPrefix.size() - 1] * arities[arities.size()-1];
+        // printf("product of arities = %ld\n", maxConfigCount);
 
             // call gpu kernel on each subgroup
             cudaCallBlockCount(
@@ -85,10 +87,10 @@ public:
                                0); //start of intermediate results
 
             // add subgroup results to task list
-            for (int i = 0; i < 64; ++i) {
-                ResultRecord tempResult{resultList_[i], 0/*intermediateStatesRoundPtr + i * base_->bitvectorSize_*/}; // intermediate result
-                resultList.push_back(tempResult);
-            }
+            // for (int i = 0; i < maxConfigCount; ++i) {
+                // ResultRecord tempResult{resultList_[i], 0/*intermediateStatesRoundPtr + i * base_->bitvectorSize_*/}; // intermediate result
+                // resultList.push_back(tempResult);
+            // }
         // }
 /*
         if (subGroup > 1) {
@@ -134,7 +136,7 @@ private:
     //where that particular bitvector starts
     uint64_t* m_getBvPtr__(int pNode, int pState) const {
         uint64_t* resultPtr = 0;
-        if(pNode < n() && pState < r(pNode)) {
+        if (pNode < n() && pState < r(pNode)) {
             resultPtr = base_->nodeList_[pNode].bitvectors + (pState * base_->bitvectorSize_);
         }
         return resultPtr;
@@ -255,7 +257,6 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     //TODO: define a more realistic size later
     cudaMalloc(&p.aritiesPtr_, sizeof(uint64_t) * 256);
     cudaMalloc(&p.aritiesPrefixPtr_, sizeof(uint64_t) * 256);
-
     cudaDeviceSynchronize();
 
     return p;
