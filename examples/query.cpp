@@ -42,7 +42,8 @@ std::tuple<bool, std::vector<int>, std::vector<int>> read_query(std::string quer
     }
     infile>>xiCount;
     for (int i = 1; i <= xiCount; ++i) {
-        xi.push_back(xiCount);
+        infile>>temp;
+        xi.push_back(temp);
     }
     return std::make_tuple(true, pa, xi);
 }

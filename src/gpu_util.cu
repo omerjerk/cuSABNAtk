@@ -61,14 +61,16 @@ template <class T> struct SharedMemory {
 
 template <class T, unsigned int blockSize, bool nIsPow2>
 __global__ void counts(
-        const T* arities,
-        const T* aritiesPrefix,
-        const T* g_idata,
-                       T* g_odata,
-                       T* g_rdata,
-                       unsigned int words_per_vector, //m/64
-                       const int vectors_per_config, //number of variables in a query
-                       const int configs_per_query /* number of configs*/) {
+                        const T* arities,
+                        const T* aritiesPrefixProd,
+                        const T* aritiesPrefixSum,
+                        const int* xi,
+                        const T* g_idata,
+                        T* g_odata,
+                        T* g_rdata,
+                        unsigned int words_per_vector, //m/64
+                        const int vectors_per_config, //number of variables in a query
+                        const int configs_per_query /* number of configs*/) {
     T* sdata = SharedMemory<T>();
 
     unsigned int tid = threadIdx.x;
@@ -77,12 +79,10 @@ __global__ void counts(
     unsigned int result_index = blockIdx.x * words_per_vector + tid;
 
     uint64_t** x = new uint64_t*[vectors_per_config];
-    unsigned long offset = 0;
     int temp = 0;
     for (int i = 0; i < vectors_per_config; ++i) {
-        temp = ((blockIdx.x/aritiesPrefix[i]) % arities[i]);
-        x[i] = (uint64_t*)g_idata + offset + (words_per_vector * temp);
-        offset += arities[i] * words_per_vector;
+        temp = ((blockIdx.x/aritiesPrefixProd[i]) % arities[i]);
+        x[i] = (uint64_t*)g_idata + (aritiesPrefixSum[i] * words_per_vector) + (words_per_vector * temp);
     }
 
     T mySum = 0;
@@ -191,7 +191,9 @@ void cudaCallBlockCount(const uint block_count,
                         const uint vectors_per_config,
                         const uint configs_per_query,
                         const uint64_t* arities,
-                        const uint64_t* aritiesPrefix,
+                        const uint64_t* aritiesPrefixProd,
+                        const uint64_t* aritiesPrefixSum,
+                        const int* xi,
                         const uint64_t* bvectorsPtr,
                         uint64_t* results,
                         uint64_t* states) {
@@ -208,43 +210,43 @@ void cudaCallBlockCount(const uint block_count,
             switch (threads)
                 {
                   case 512:
-                      counts<uint64_t, 512, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 512, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 256:
-                      counts<uint64_t, 256, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 256, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 128:
-                      counts<uint64_t, 128, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 128, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 64:
-                      counts<uint64_t, 64, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 64, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 32:
-                      counts<uint64_t, 32, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 32, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 16:
-                      counts<uint64_t, 16, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 16, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 8:
-                      counts<uint64_t, 8, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 8, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 4:
-                      counts<uint64_t, 4, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 4, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 2:
-                      counts<uint64_t, 2, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 2, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 1:
-                      counts<uint64_t, 1, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 1, true><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
                 }
         }
@@ -253,43 +255,43 @@ void cudaCallBlockCount(const uint block_count,
             switch (threads)
                 {
                   case 512:
-                      counts<uint64_t, 512, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 512, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 256:
-                      counts<uint64_t, 256, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 256, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 128:
-                      counts<uint64_t, 128, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 128, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 64:
-                      counts<uint64_t, 64, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 64, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 32:
-                      counts<uint64_t, 32, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 32, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 16:
-                      counts<uint64_t, 16, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 16, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 8:
-                      counts<uint64_t, 8, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 8, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 4:
-                      counts<uint64_t, 4, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 4, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 2:
-                      counts<uint64_t, 2, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 2, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
 
                   case 1:
-                      counts<uint64_t, 1, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefix, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
+                      counts<uint64_t, 1, false><<< dimGrid, dimBlock, smemSize >>>(arities, aritiesPrefixProd, aritiesPrefixSum, xi, bvectorsPtr, results, states, words_per_vector, vectors_per_config, configs_per_query);
                       break;
                 }
         }

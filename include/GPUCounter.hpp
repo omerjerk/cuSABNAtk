@@ -50,26 +50,41 @@ public:
     template <typename score_functor>
     void apply(std::vector<int> xa_vect, std::vector<int> pa_vect, std::vector<score_functor> &F) const {
         std::vector<uint64_t> arities;
-        std::vector<uint64_t> aritiesPrefix;
-
-        // auto xa_vect = as_vector(xi);
-        // auto pa_vect = as_vector(pa);
+        std::vector<uint64_t> aritiesPrefixProd;
+        std::vector<uint64_t> aritiesPrefixSum;
+        std::vector<int> xi;
 
         // build arities list
-        arities.push_back(r(xa_vect[0]-1));
-        aritiesPrefix.push_back(1);
-        long arity;
+        xi.push_back(xa_vect[0]-1);
+        arities.push_back(r(xi[0]));
+        // printf("arity for xi = %d is %d\n", xa_vect[0]-1, r(xa_vect[0]-1));
+        aritiesPrefixProd.push_back(1);
+        aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[0]]);
+        int arity;
         for (int i = 0; i < pa_vect.size(); i++) {
-            arity = r(pa_vect[i]-1);
-            // printf("arity = %ld\n", arity);
+            xi.push_back(pa_vect[i]-1);
+            arity = r(xi[i+1]);
+            // printf("arity for xi = %d is %d\n", pa_vect[i]-1, arity);
             arities.push_back(arity);
-            aritiesPrefix.push_back(aritiesPrefix[i]*arities[i]);
+            aritiesPrefixProd.push_back(aritiesPrefixProd[i]*arities[i]);
+            aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[i+1]]);
         }
 
-        m_copyAritiesToDevice(arities, aritiesPrefix);
+        m_copyAritiesToDevice(arities, aritiesPrefixProd, aritiesPrefixSum, xi);
 
-        long maxConfigCount = aritiesPrefix[aritiesPrefix.size() - 1] * arities[arities.size()-1];
+        long maxConfigCount = aritiesPrefixProd[aritiesPrefixProd.size() - 1] * arities[arities.size()-1];
         // printf("product of arities = %ld\n", maxConfigCount);
+
+        // int temp;
+        // for (int j = 0; j < maxConfigCount; ++j) {
+            // for (int i = 0; i < arities.size(); ++i) {
+                // temp = ((j/aritiesPrefixProd[i]) % arities[i]);
+                // x[i] = (uint64_t*)g_idata + offset + (words_per_vector * temp);
+                // offset += arities[i] * words_per_vector;
+                // printf("%d ", temp);
+            // } printf("\n");
+        // }
+        
 
         // call gpu kernel on each subgroup
         cudaCallBlockCount(
@@ -79,14 +94,17 @@ public:
                             arities.size(), //number of variables in one config
                             maxConfigCount, //number of configuration
                             aritiesPtr_,
-                            aritiesPrefixPtr_,
+                            aritiesPrefixProdPtr_,
+                            aritiesPrefixSumPtr_,
+                            xiPtr_,
                             base_->nodeList_[0].bitvectors, //starting address of our data
                             resultList_, //results array
                             0 /*intermediateResultsPtr_*/); //start of intermediate results
 
-        // for (int i = 0; i < maxConfigCount; ++i) {
-            // if (resultList_[i] > 0) F[0](resultList_[i], i);
-        // }
+        // execute callback for all non zero results
+        for (int i = 0; i < maxConfigCount; ++i) {
+            if (resultList_[i] > 0) F[0](resultList_[i], i);
+        }
 
     } // end apply - non zero
 
@@ -101,9 +119,12 @@ private:
         return resultPtr;
     } // m_getBvPtr__
 
-    void m_copyAritiesToDevice(std::vector<uint64_t> pArities, std::vector<uint64_t> pAritiesPrefix) const {
+    void m_copyAritiesToDevice(std::vector<uint64_t> pArities, std::vector<uint64_t> pAritiesPrefixProd, 
+                                    std::vector<uint64_t> pAritiesPrefixSum, std::vector<int> pXi) const {
         cudaMemcpy(aritiesPtr_, pArities.data(), pArities.size() * sizeof(uint64_t), cudaMemcpyHostToDevice);
-        cudaMemcpy(aritiesPrefixPtr_, pAritiesPrefix.data(), pAritiesPrefix.size() * sizeof(uint64_t), cudaMemcpyHostToDevice);
+        cudaMemcpy(aritiesPrefixProdPtr_, pAritiesPrefixProd.data(), pAritiesPrefixProd.size() * sizeof(uint64_t), cudaMemcpyHostToDevice);
+        cudaMemcpy(aritiesPrefixSumPtr_, pAritiesPrefixSum.data(), pAritiesPrefixSum.size() * sizeof(uint64_t), cudaMemcpyHostToDevice);
+        cudaMemcpy(xiPtr_, pXi.data(), pXi.size() * sizeof(int), cudaMemcpyHostToDevice);
     }
 
     int m_bvSize__() const { return this->base_.bitvectorSize_; }
@@ -126,7 +147,8 @@ private:
     base* base_;
     //contains GPU memory addresses where each particular value of xi starts
     node* nodeList_;
-    int maxNodesPerTask_ = 6;
+    
+    std::vector<int> aritiesPrefixSumGlobal_;
 
     //results of each configuration of the given query
     uint64_t* resultList_;
@@ -135,7 +157,9 @@ private:
     //this isn't used in case there is only one round
     uint64_t* intermediateResultsPtr_;
     uint64_t* aritiesPtr_;
-    uint64_t* aritiesPrefixPtr_;
+    uint64_t* aritiesPrefixProdPtr_;
+    uint64_t* aritiesPrefixSumPtr_;
+    int* xiPtr_;
 
     template <int M, typename Iter>
     friend GPUCounter<M> create_GPUCounter(int, int, Iter);
@@ -187,6 +211,11 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     for (int xi = 0; xi < n; ++xi) {
         p.base_->nodeList_[xi].bitvectors = bvPtr + offset;
         offset += p.base_->nodeList_[xi].r_ * bitvectorSize_InWords;
+        if (!xi) {
+            p.aritiesPrefixSumGlobal_.push_back(0);
+        } else {
+            p.aritiesPrefixSumGlobal_.push_back(p.aritiesPrefixSumGlobal_[p.aritiesPrefixSumGlobal_.size()-1] + p.base_->nodeList_[xi-1].r_);
+        }
     }
 
     // build bitvectors for each Xi and copy into device
@@ -203,7 +232,7 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
         }
         offset += p.base_->nodeList_[xi].r_ * bitvectorSize_InWords;
     }
-    cudaMemcpy(p.base_->nodeList_[0].bitvectors, tempBvPtr, sizeof(uint64_t) * bitvectorWordCount, cudaMemcpyHostToDevice);
+    cudaMemcpy(bvPtr, tempBvPtr, sizeof(uint64_t) * bitvectorWordCount, cudaMemcpyHostToDevice);
     delete[] tempBvPtr;
 
     //expected size = (number of configurations in the query) * sizeof(uint64_t)
@@ -215,7 +244,9 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
 
     //TODO: define a more realistic size later
     cudaMalloc(&p.aritiesPtr_, sizeof(uint64_t) * 20);
-    cudaMalloc(&p.aritiesPrefixPtr_, sizeof(uint64_t) * 20);
+    cudaMalloc(&p.aritiesPrefixProdPtr_, sizeof(uint64_t) * 20);
+    cudaMalloc(&p.aritiesPrefixSumPtr_, sizeof(uint64_t) * 20);
+    cudaMalloc(&p.xiPtr_, sizeof(int) * 20);
     cudaDeviceSynchronize();
 
     return p;
