@@ -48,21 +48,19 @@ public:
 
     // FIXME: consider cases when |xa_vect| is greater than 1
     template <typename score_functor>
-    void apply(const set_type &xi, const set_type &pa, std::vector<score_functor> &F) const {
+    void apply(std::vector<int> xa_vect, std::vector<int> pa_vect, std::vector<score_functor> &F) const {
         std::vector<uint64_t> arities;
         std::vector<uint64_t> aritiesPrefix;
 
-        std::vector<ResultRecord> resultList;
-
-        auto xa_vect = as_vector(xi);
-        auto pa_vect = as_vector(pa);
+        // auto xa_vect = as_vector(xi);
+        // auto pa_vect = as_vector(pa);
 
         // build arities list
-        arities.push_back(r(xa_vect[0]));
+        arities.push_back(r(xa_vect[0]-1));
         aritiesPrefix.push_back(1);
         long arity;
         for (int i = 0; i < pa_vect.size(); i++) {
-            arity = r(pa_vect[i]);
+            arity = r(pa_vect[i]-1);
             // printf("arity = %ld\n", arity);
             arities.push_back(arity);
             aritiesPrefix.push_back(aritiesPrefix[i]*arities[i]);
@@ -73,61 +71,22 @@ public:
         long maxConfigCount = aritiesPrefix[aritiesPrefix.size() - 1] * arities[arities.size()-1];
         // printf("product of arities = %ld\n", maxConfigCount);
 
-            // call gpu kernel on each subgroup
-            cudaCallBlockCount(
-                               65535, //device limit, not used
-                               1024, //device limit, not used
-                               base_->bitvectorSize_, //number of words in each bitvector
-                               arities.size(), //number of variables in one config
-                               maxConfigCount, //number of configuration
-                               aritiesPtr_,
-                               aritiesPrefixPtr_,
-                               base_->nodeList_[0].bitvectors, //starting address of our data
-                               resultList_, //results array
-                               0); //start of intermediate results
+        // call gpu kernel on each subgroup
+        cudaCallBlockCount(
+                            65535, //device limit, not used
+                            1024, //device limit, not used
+                            base_->bitvectorSize_, //number of words in each bitvector
+                            arities.size(), //number of variables in one config
+                            maxConfigCount, //number of configuration
+                            aritiesPtr_,
+                            aritiesPrefixPtr_,
+                            base_->nodeList_[0].bitvectors, //starting address of our data
+                            resultList_, //results array
+                            0 /*intermediateResultsPtr_*/); //start of intermediate results
 
-            // add subgroup results to task list
-            // for (int i = 0; i < maxConfigCount; ++i) {
-                // ResultRecord tempResult{resultList_[i], 0/*intermediateStatesRoundPtr + i * base_->bitvectorSize_*/}; // intermediate result
-                // resultList.push_back(tempResult);
-            // }
+        // for (int i = 0; i < maxConfigCount; ++i) {
+            // if (resultList_[i] > 0) F[0](resultList_[i], i);
         // }
-/*
-        if (subGroup > 1) {
-            // Round two: execute all non-zero round 1 combinations
-            activeRoundTwoCount = 0;
-            bitvectorsForIntersect.clear();
-            for(int i = 0; i < te.getTaskCount(); i++) {
-                std::vector<int> combo = te.next2();
-
-                bool nonZero = true;
-                for(int state : combo) nonZero &= (resultList[state].mCount > 0);
-
-                if (nonZero) {
-                    activeRoundTwoCount++;
-                    for (int nonZeroState : combo) {
-                        bitvectorsForIntersect.push_back((uint64_t*)resultList[nonZeroState].mResultPtr);
-                    }
-                }
-            }
-
-            m_copyBvListToDevice__(bitvectorsForIntersect);
-
-            cudaCallBlockCount(65535, // device limit, not used
-                               1024, // device limit, not used
-                               base_->bitvectorSize_, // word count
-                               bitvectorsForIntersect.size() / activeRoundTwoCount, // state count
-                               activeRoundTwoCount, // config count
-                               countListPtr_, // pointer to bitvector pointers
-                               resultList_, // results array
-                               0); // no intermediate results
-        }*/
-
-        // execute callback for all non zero results
-        // int resultCount = subGroup > 1 ? activeRoundTwoCount : te.getTaskCount();
-        for (int i = 0; i < maxConfigCount; ++i) {
-            if (resultList_[i] > 0) F[0](resultList_[i], i);
-        }
 
     } // end apply - non zero
 
@@ -231,8 +190,8 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     }
 
     // build bitvectors for each Xi and copy into device
-    uint64_t* tempBvPtr = new uint64_t[bitvectorWordCount];
-    std::fill_n(tempBvPtr, bitvectorWordCount, 0);
+    uint64_t* tempBvPtr = (uint64_t*) malloc(sizeof(uint64_t) * bitvectorWordCount);
+    memset(tempBvPtr, 0, sizeof(uint64_t) * bitvectorWordCount);
     temp_it = it;
     offset = 0;
     for (int xi = 0; xi < n; ++xi) {
@@ -244,19 +203,19 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
         }
         offset += p.base_->nodeList_[xi].r_ * bitvectorSize_InWords;
     }
-    cudaMemcpy(p.base_->nodeList_[0].bitvectors, tempBvPtr, bitvectorWordCount, cudaMemcpyHostToDevice);
+    cudaMemcpy(p.base_->nodeList_[0].bitvectors, tempBvPtr, sizeof(uint64_t) * bitvectorWordCount, cudaMemcpyHostToDevice);
     delete[] tempBvPtr;
 
     //expected size = (number of configurations in the query) * sizeof(uint64_t)
     cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY);
     //expected size = (bitVectorSize) * (max number of configurations in a round) * sizeof(uint64_t)
-    cudaMalloc(&p.intermediateResultsPtr_, p.base_->bitvectorSize_ * sizeof(uint64_t) * MAX_INTERMEDIATE_RESULTS);
+    cudaMallocManaged(&p.intermediateResultsPtr_, p.base_->bitvectorSize_ * sizeof(uint64_t) * 1024);
 
-    cudaMemset(p.intermediateResultsPtr_, 0, p.base_->bitvectorSize_ * sizeof(uint64_t) * MAX_INTERMEDIATE_RESULTS);
+    memset(p.intermediateResultsPtr_, 0, p.base_->bitvectorSize_ * sizeof(uint64_t) * 1024);
 
     //TODO: define a more realistic size later
-    cudaMalloc(&p.aritiesPtr_, sizeof(uint64_t) * 256);
-    cudaMalloc(&p.aritiesPrefixPtr_, sizeof(uint64_t) * 256);
+    cudaMalloc(&p.aritiesPtr_, sizeof(uint64_t) * 20);
+    cudaMalloc(&p.aritiesPrefixPtr_, sizeof(uint64_t) * 20);
     cudaDeviceSynchronize();
 
     return p;

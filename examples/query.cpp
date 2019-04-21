@@ -88,7 +88,7 @@ int main(int argc, char* argv[]) {
 
     std::tie(b, n, m) = read_csv(csv_name, D);
 
-    printf("n = %d m = %d\n", n, m);
+    // printf("n = %d m = %d\n", n, m);
 
     if (!b) {
         Log.error() << "could not read input data" << std::endl;
@@ -110,13 +110,12 @@ int main(int argc, char* argv[]) {
         double time = 0;
         std::vector<Call> F(1);
         auto queries = get_benchmark_queries(n, nt, nq);
+        std::vector<int> xi(1, -1);
+        std::vector<int> pa(nq-1, -1);
         for (int i = 0; i < queries.size(); ++i) {
-            auto xi = set_empty<set_type>();
-            auto pa = set_empty<set_type>();
-
-            xi = set_add(xi, queries[i][0]);
+            xi[0] = queries[i][0];
             for (int j = 1; j < nq; ++j) {
-                pa = set_add(pa, queries[i][j]);
+                pa[j-1] = queries[i][j];
             }
             auto t0 = std::chrono::system_clock::now();
             gcount.apply(xi, pa, F);
@@ -130,20 +129,9 @@ int main(int argc, char* argv[]) {
         std::vector<int> xiVec;
         std::tie(b, paVec, xiVec) = read_query(query_file);
 
-        auto xi = set_empty<set_type>();
-        auto pa = set_empty<set_type>();
-
-        for (int i = 0; i < paVec.size(); ++i) {
-            pa = set_add(pa, paVec[i]);
-        }
-
-        for (int i = 0; i < xiVec.size(); ++i) {
-            xi = set_add(xi, xiVec[i]);
-        }
-
         std::vector<Call> F(1);
 
-        gcount.apply(xi, pa, F);
+        gcount.apply(xiVec, paVec, F);
     }
 
     return 0;

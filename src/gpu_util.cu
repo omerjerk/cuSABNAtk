@@ -77,7 +77,7 @@ __global__ void counts(
     unsigned int result_index = blockIdx.x * words_per_vector + tid;
 
     uint64_t** x = new uint64_t*[vectors_per_config];
-    int offset = 0;
+    unsigned long offset = 0;
     int temp = 0;
     for (int i = 0; i < vectors_per_config; ++i) {
         temp = ((blockIdx.x/aritiesPrefix[i]) % arities[i]);
