@@ -78,18 +78,15 @@ __global__ void counts(
     unsigned int word_index = i % blockSize; // cant this be tid
     unsigned int result_index = blockIdx.x * words_per_vector + tid;
 
-    uint64_t** x = new uint64_t*[vectors_per_config];
-    int temp = 0;
-    for (int i = 0; i < vectors_per_config; ++i) {
-        temp = ((blockIdx.x/aritiesPrefixProd[i]) % arities[i]);
-        x[i] = (uint64_t*)g_idata + (aritiesPrefixSum[i] * words_per_vector) + (words_per_vector * temp);
-    }
-
     T mySum = 0;
-    T localState = x[0][word_index]; // first word slice of config
+    int temp = ((blockIdx.x/aritiesPrefixProd[0]) % arities[0]);
+    T localState = *(((uint64_t*)g_idata) + ((aritiesPrefixSum[0] + temp) * words_per_vector) + word_index);
 
     // running sum for all word slices
-    for(int p = 1; p < vectors_per_config; ++p) localState = localState & x[p][word_index];
+    for(int p = 1; p < vectors_per_config; ++p) {
+        temp = ((blockIdx.x/aritiesPrefixProd[p]) % arities[p]);
+        localState = localState & *(((uint64_t*)g_idata) + ((aritiesPrefixSum[p] + temp) * words_per_vector) + word_index);
+    }
 
     if (g_rdata != 0) { // todo can be compile time decision
         g_rdata[result_index] = localState;
@@ -100,9 +97,13 @@ __global__ void counts(
     // ensure we don't read out of bounds -- this is optimized away for power of 2 sized arrays
     if (nIsPow2 || (tid + blockSize < words_per_vector)) {
         unsigned int word_index_upper_half = word_index + blockSize;
-        localState = x[0][word_index_upper_half];
+        temp = ((blockIdx.x/aritiesPrefixProd[0]) % arities[0]);
+        localState = *(((uint64_t*)g_idata) + ((aritiesPrefixSum[0] + temp) * words_per_vector) + word_index_upper_half);
 
-        for(int p = 1; p < vectors_per_config; p++) localState = localState & x[p][word_index_upper_half];
+        for(int p = 1; p < vectors_per_config; p++) {
+            temp = ((blockIdx.x/aritiesPrefixProd[p]) % arities[p]);
+            localState = localState & *(((uint64_t*)g_idata) + ((aritiesPrefixSum[p] + temp) * words_per_vector) + word_index_upper_half);
+        }
 
         if(g_rdata != 0){ // todo can be compile time decision
             g_rdata[result_index + blockSize] = localState;
