@@ -4,3 +4,5 @@ examples/query
 .idea/*
 cmake-build-debug/
 data/correct_output.txt
+.cproject
+.project
