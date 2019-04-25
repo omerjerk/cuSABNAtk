@@ -6,3 +6,4 @@ cmake-build-debug/
 data/correct_output.txt
 .cproject
 .project
+code-for-testing

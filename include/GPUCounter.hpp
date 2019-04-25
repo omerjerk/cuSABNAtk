@@ -55,16 +55,14 @@ public:
         std::vector<int> xi;
 
         // build arities list
-        xi.push_back(xa_vect[0]-1);
+        xi.push_back(xa_vect[0]);
         arities.push_back(r(xi[0]));
-        // printf("arity for xi = %d is %d\n", xa_vect[0]-1, r(xa_vect[0]-1));
         aritiesPrefixProd.push_back(1);
         aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[0]]);
         int arity;
         for (int i = 0; i < pa_vect.size(); i++) {
-            xi.push_back(pa_vect[i]-1);
+            xi.push_back(pa_vect[i]);
             arity = r(xi[i+1]);
-            // printf("arity for xi = %d is %d\n", pa_vect[i]-1, arity);
             arities.push_back(arity);
             aritiesPrefixProd.push_back(aritiesPrefixProd[i]*arities[i]);
             aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[i+1]]);
@@ -74,17 +72,6 @@ public:
 
         long maxConfigCount = aritiesPrefixProd[aritiesPrefixProd.size() - 1] * arities[arities.size()-1];
         // printf("product of arities = %ld\n", maxConfigCount);
-
-        // int temp;
-        // for (int j = 0; j < maxConfigCount; ++j) {
-            // for (int i = 0; i < arities.size(); ++i) {
-                // temp = ((j/aritiesPrefixProd[i]) % arities[i]);
-                // x[i] = (uint64_t*)g_idata + offset + (words_per_vector * temp);
-                // offset += arities[i] * words_per_vector;
-                // printf("%d ", temp);
-            // } printf("\n");
-        // }
-        
 
         // call gpu kernel on each subgroup
         cudaCallBlockCount(
@@ -103,7 +90,9 @@ public:
 
         // execute callback for all non zero results
         for (int i = 0; i < maxConfigCount; ++i) {
-            if (resultList_[i] > 0) F[0](resultList_[i], i);
+            if (resultList_[i] > 0) {
+                F[0](resultList_[i], i);
+            }
         }
 
     } // end apply - non zero
@@ -200,7 +189,6 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
         p.base_->nodeList_[xi].r_ = size;
         bitvectorCount += size;
     }
-
     int bitvectorWordCount = bitvectorCount * bitvectorSize_InWords;
 
     uint64_t* bvPtr;
@@ -237,10 +225,8 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
 
     //expected size = (number of configurations in the query) * sizeof(uint64_t)
     cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY);
-    //expected size = (bitVectorSize) * (max number of configurations in a round) * sizeof(uint64_t)
-    cudaMallocManaged(&p.intermediateResultsPtr_, p.base_->bitvectorSize_ * sizeof(uint64_t) * 1024);
-
-    memset(p.intermediateResultsPtr_, 0, p.base_->bitvectorSize_ * sizeof(uint64_t) * 1024);
+    // cudaMallocManaged(&p.intermediateResultsPtr_, sizeof(uint64_t) * 1024 * bitvectorWordCount);
+    // memset(p.intermediateResultsPtr_, 0, sizeof(uint64_t) * 1024 * bitvectorWordCount);
 
     //TODO: define a more realistic size later
     cudaMalloc(&p.aritiesPtr_, sizeof(uint64_t) * 20);
