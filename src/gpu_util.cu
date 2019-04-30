@@ -88,9 +88,9 @@ __global__ void counts(
         localState = localState & *(((uint64_t*)g_idata) + ((aritiesPrefixSum[p] + temp) * words_per_vector) + word_index);
     }
 
-    if (g_rdata != 0) { // todo can be compile time decision
-        g_rdata[result_index] = localState;
-    }
+    // if (g_rdata != 0) { // todo can be compile time decision
+        // g_rdata[result_index] = localState;
+    // }
 
     mySum += __popcll(localState);
 

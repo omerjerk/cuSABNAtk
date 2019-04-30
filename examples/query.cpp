@@ -109,7 +109,6 @@ int main(int argc, char* argv[]) {
             Log.error() << "Number of variables in query cannot be more than number of variables in the dataset" << std::endl;
             return -1;
         }
-        double time = 0;
         std::vector<Call> F(1);
         std::vector<std::vector<int>> xis;
         std::vector<std::vector<int>> pas;
