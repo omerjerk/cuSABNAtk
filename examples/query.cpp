@@ -20,7 +20,6 @@ struct Call {
 
     void operator()(int Nijk, int i) {
       nijk = Nijk;
-    //   printf("%d %d\n", nijk, i);
     }
 
     int score() const { return nijk; }
@@ -48,7 +47,7 @@ std::tuple<bool, std::vector<int>, std::vector<int>> read_query(std::string quer
     return std::make_tuple(true, pa, xi);
 }
 
-std::vector<std::vector<int>> get_benchmark_queries(int n, int nt, int nq) {
+std::tuple<std::vector<std::vector<int>>, std::vector<std::vector<int>>> get_benchmark_queries(int n, int nt, int nq) {
     std::vector<int> variables(n);
     for (int i = 0; i < n; ++i) {
         variables[i] = i;
@@ -56,15 +55,17 @@ std::vector<std::vector<int>> get_benchmark_queries(int n, int nt, int nq) {
     int seed = 100;
     auto start = variables.begin();
     auto end = variables.end();
-    std::vector<std::vector<int>> queries(nt, std::vector<int>(nq));
+    std::vector<std::vector<int>> pas(nt, std::vector<int>(nq-1));
+    std::vector<std::vector<int>> xis(nt, std::vector<int>(1));
     for (int i = 0; i < nt; ++i) {
         shuffle(start, end, std::mt19937(seed));
-        for (int j = 0; j < nq; ++j) {
-            queries[i][j] = variables[j];
+        xis[i][0] = variables[0];
+        for (int j = 1; j < nq; ++j) {
+            pas[i][j-1] = variables[j];
             // printf("%d ", variables[j]);
         } //printf("\n");
     }
-    return queries;
+    return std::make_tuple(xis, pas);
 }
 
 int main(int argc, char* argv[]) {
@@ -110,20 +111,15 @@ int main(int argc, char* argv[]) {
         }
         double time = 0;
         std::vector<Call> F(1);
-        auto queries = get_benchmark_queries(n, nt, nq);
-        std::vector<int> xi(1, -1);
-        std::vector<int> pa(nq-1, -1);
-        for (int i = 0; i < queries.size(); ++i) {
-            xi[0] = queries[i][0];
-            for (int j = 1; j < nq; ++j) {
-                pa[j-1] = queries[i][j];
-            }
-            auto t0 = std::chrono::system_clock::now();
-            gcount.apply(xi, pa, F);
-            auto t1 = std::chrono::system_clock::now();
-            time += std::chrono::duration<double>(t1 - t0).count();
+        std::vector<std::vector<int>> xis;
+        std::vector<std::vector<int>> pas;
+        std::tie(xis, pas) = get_benchmark_queries(n, nt, nq);
+        auto t0 = std::chrono::system_clock::now();
+        for (int i = 0; i < nt; ++i) {
+            gcount.apply(xis[i], pas[i], F);
         }
-        printf("Time for %d queries with %d variables = %f\n", nt, nq, time);
+        auto t1 = std::chrono::system_clock::now();
+        printf("Time for %d queries with %d variables = %fs\n", nt, nq, std::chrono::duration<double>(t1-t0).count());
     } else {
         //execute the query
         std::vector<int> paVec;
