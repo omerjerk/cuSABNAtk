@@ -23,7 +23,8 @@
 #include "bit_util.hpp"
 #include "gpu_util.cuh"
 
-//TODO: check if these should be hardware dependent
+
+// TODO: check if these should be hardware dependent
 static const int MAX_COUNTS_PER_QUERY = 1024;
 static const int MAX_INTERMEDIATE_RESULTS = 128;
 static const int MAX_NUM_STREAMS = 50;
@@ -49,7 +50,7 @@ public:
 
     // FIXME: consider cases when |xa_vect| is greater than 1
     template <typename score_functor>
-    void apply(std::vector<int> xa_vect, std::vector<int> pa_vect, std::vector<score_functor> &F) const {
+    void apply(const std::vector<int>& xa_vect, const std::vector<int>& pa_vect, std::vector<score_functor>& F) const {
         std::vector<uint64_t> arities;
         std::vector<uint64_t> aritiesPrefixProd;
         std::vector<uint64_t> aritiesPrefixSum;
@@ -101,8 +102,8 @@ public:
     } // end apply - non zero
 
 private:
-    //given the variable number and its state, this function returns the GPU address
-    //where that particular bitvector starts
+    // given the variable number and its state, this function returns the GPU address
+    // where that particular bitvector starts
     uint64_t* m_getBvPtr__(int pNode, int pState) const {
         uint64_t* resultPtr = 0;
         if (pNode < n() && pState < r(pNode)) {
@@ -138,7 +139,7 @@ private:
     base* base_;
     //contains GPU memory addresses where each particular value of xi starts
     node* nodeList_;
-    
+
     std::vector<int> aritiesPrefixSumGlobal_;
 
     //results of each configuration of the given query
@@ -227,12 +228,12 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     cudaMemcpy(bvPtr, tempBvPtr, sizeof(uint64_t) * bitvectorWordCount, cudaMemcpyHostToDevice);
     delete[] tempBvPtr;
 
-    //expected size = (number of configurations in the query) * sizeof(uint64_t)
+    // expected size = (number of configurations in the query) * sizeof(uint64_t)
     cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY);
     // cudaMallocManaged(&p.intermediateResultsPtr_, sizeof(uint64_t) * 1024 * bitvectorWordCount);
     // memset(p.intermediateResultsPtr_, 0, sizeof(uint64_t) * 1024 * bitvectorWordCount);
 
-    //TODO: define a more realistic size later
+    // TODO: define a more realistic size later
     cudaMalloc(&p.aritiesPtr_, sizeof(uint64_t) * 20);
     cudaMalloc(&p.aritiesPrefixProdPtr_, sizeof(uint64_t) * 20);
     cudaMalloc(&p.aritiesPrefixSumPtr_, sizeof(uint64_t) * 20);
