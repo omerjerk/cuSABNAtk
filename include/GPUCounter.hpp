@@ -160,7 +160,12 @@ private:
 }; // class GPUCounter
 
 
+// TODO: add option to select which CUDA device to use
 template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, Iter it) {
+    int devicesCount = 0;
+    cudaGetDeviceCount(&devicesCount);
+    if (devicesCount == 0) throw std::runtime_error("no CUDA capable devices found");
+
     GPUCounter<N> p;
 
     int indices[256];
