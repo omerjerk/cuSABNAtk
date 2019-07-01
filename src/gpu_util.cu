@@ -38,8 +38,6 @@
 
 #include <cstdint>
 
-#include "gpu_util.cuh"
-
 //
 // Reduction based on cuda-8.0/samples/6_Advanced/reduction
 //

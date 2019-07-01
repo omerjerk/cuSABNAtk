@@ -19,7 +19,6 @@
 
 #include <cuda_runtime.h>
 
-#include "TaskEnumerator.hpp"
 #include "bit_util.hpp"
 #include "gpu_util.cuh"
 
@@ -51,75 +50,80 @@ public:
     // FIXME: consider cases when |xa_vect| is greater than 1
     template <typename score_functor>
     void apply(const std::vector<int>& xa_vect, const std::vector<int>& pa_vect, std::vector<score_functor>& F) const {
+        std::vector<int> xi;
+
         std::vector<uint64_t> arities;
         std::vector<uint64_t> aritiesPrefixProd;
         std::vector<uint64_t> aritiesPrefixSum;
-        std::vector<int> xi;
 
         // build arities list
         xi.push_back(xa_vect[0]);
         arities.push_back(r(xi[0]));
         aritiesPrefixProd.push_back(1);
         aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[0]]);
-        int arity;
+
+        int arity = 0;
+
         for (int i = 0; i < pa_vect.size(); i++) {
             xi.push_back(pa_vect[i]);
-            arity = r(xi[i+1]);
+
+            arity = r(xi[i + 1]);
+
             arities.push_back(arity);
-            aritiesPrefixProd.push_back(aritiesPrefixProd[i]*arities[i]);
-            aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[i+1]]);
-        }
+            aritiesPrefixProd.push_back(aritiesPrefixProd[i] * arities[i]);
+            aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[i + 1]]);
+        } // for i
 
-        m_copyAritiesToDevice(arities, aritiesPrefixProd, aritiesPrefixSum);
+        m_copyAritiesToDevice__(arities, aritiesPrefixProd, aritiesPrefixSum);
 
-        long maxConfigCount = aritiesPrefixProd[aritiesPrefixProd.size() - 1] * arities[arities.size()-1];
-        // printf("product of arities = %ld\n", maxConfigCount);
+        long int maxConfigCount = aritiesPrefixProd[aritiesPrefixProd.size() - 1] * arities[arities.size() - 1];
         int streamId = *queryCountPtr % MAX_NUM_STREAMS;
 
         // call gpu kernel on each subgroup
-        cudaCallBlockCount(
-                            65535, //device limit, not used
-                            1024, //device limit, not used
-                            base_->bitvectorSize_, //number of words in each bitvector
-                            arities.size(), //number of variables in one config
-                            maxConfigCount, //number of configuration
-                            aritiesPtr_,
-                            aritiesPrefixProdPtr_,
-                            aritiesPrefixSumPtr_,
-                            base_->nodeList_[0].bitvectors, //starting address of our data
-                            resultList_, //results array
-                            0 /*intermediateResultsPtr_*/,
-                            streams[streamId]); //start of intermediate results
+        cudaCallBlockCount(65535,                          // device limit, not used
+                           1024,                           // device limit, not used
+                           base_->bitvectorSize_,          // number of words in each bitvector
+                           arities.size(),                 // number of variables in one config
+                           maxConfigCount,                 // number of configurations
+                           aritiesPtr_,
+                           aritiesPrefixProdPtr_,
+                           aritiesPrefixSumPtr_,
+                           base_->nodeList_[0].bitvectors, // starting address of our data
+                           resultList_,                    // results array
+                           0 /*intermediateResultsPtr_*/,
+                           streams[streamId]);             // start of intermediate results
 
+        // TODO: can we overlap this with GPGPU execution
         // execute callback for all non zero results
         for (int i = 0; i < maxConfigCount; ++i) {
             if (resultList_[i] > 0) {
                 F[0](resultList_[i], i);
             }
         }
-        ++*queryCountPtr;
 
-    } // end apply - non zero
+        ++*queryCountPtr;
+    } // apply
 
 private:
+    int m_bvSize__() const { return this->base_.bitvectorSize_; }
+
     // given the variable number and its state, this function returns the GPU address
     // where that particular bitvector starts
     uint64_t* m_getBvPtr__(int pNode, int pState) const {
-        uint64_t* resultPtr = 0;
+        uint64_t* resultPtr = nullptr;
         if (pNode < n() && pState < r(pNode)) {
             resultPtr = base_->nodeList_[pNode].bitvectors + (pState * base_->bitvectorSize_);
         }
         return resultPtr;
     } // m_getBvPtr__
 
-    void m_copyAritiesToDevice(std::vector<uint64_t> pArities, std::vector<uint64_t> pAritiesPrefixProd, 
-                                    std::vector<uint64_t> pAritiesPrefixSum) const {
+    void m_copyAritiesToDevice__(const std::vector<uint64_t>& pArities,
+                                 const std::vector<uint64_t>& pAritiesPrefixProd,
+                                 const std::vector<uint64_t>& pAritiesPrefixSum) const {
         cudaMemcpy(aritiesPtr_, pArities.data(), pArities.size() * sizeof(uint64_t), cudaMemcpyHostToDevice);
         cudaMemcpy(aritiesPrefixProdPtr_, pAritiesPrefixProd.data(), pAritiesPrefixProd.size() * sizeof(uint64_t), cudaMemcpyHostToDevice);
         cudaMemcpy(aritiesPrefixSumPtr_, pAritiesPrefixSum.data(), pAritiesPrefixSum.size() * sizeof(uint64_t), cudaMemcpyHostToDevice);
-    }
-
-    int m_bvSize__() const { return this->base_.bitvectorSize_; }
+    } // m_copyAritiesToDevice__
 
 
     struct node {
@@ -169,8 +173,8 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     GPUCounter<N> p;
 
     int indices[256];
-    int temp;
-    int size;
+    int temp = 0;
+    int size = 0;
 
     Iter temp_it = it;
     int bitvectorCount = 0;
@@ -198,29 +202,33 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
 
         p.base_->nodeList_[xi].r_ = size;
         bitvectorCount += size;
-    }
+    } // for xi
+
     int bitvectorWordCount = bitvectorCount * bitvectorSize_InWords;
 
-    uint64_t* bvPtr;
+    uint64_t* bvPtr = nullptr;
     cudaMalloc(&bvPtr, sizeof(uint64_t) * bitvectorWordCount);
 
     // set bitvector addresses (device addrs) in node list (host mem)
     int offset = 0;
+
     for (int xi = 0; xi < n; ++xi) {
         p.base_->nodeList_[xi].bitvectors = bvPtr + offset;
         offset += p.base_->nodeList_[xi].r_ * bitvectorSize_InWords;
         if (!xi) {
             p.aritiesPrefixSumGlobal_.push_back(0);
         } else {
-            p.aritiesPrefixSumGlobal_.push_back(p.aritiesPrefixSumGlobal_[p.aritiesPrefixSumGlobal_.size()-1] + p.base_->nodeList_[xi-1].r_);
+            p.aritiesPrefixSumGlobal_.push_back(p.aritiesPrefixSumGlobal_[p.aritiesPrefixSumGlobal_.size() - 1] + p.base_->nodeList_[xi - 1].r_);
         }
-    }
+    } // for xi
 
     // build bitvectors for each Xi and copy into device
-    uint64_t* tempBvPtr = (uint64_t*) malloc(sizeof(uint64_t) * bitvectorWordCount);
+    uint64_t* tempBvPtr = new uint64_t[bitvectorWordCount];
     memset(tempBvPtr, 0, sizeof(uint64_t) * bitvectorWordCount);
+
     temp_it = it;
     offset = 0;
+
     for (int xi = 0; xi < n; ++xi) {
         for (int j = 0; j < m; ++j) {
             temp = *temp_it++;
@@ -230,6 +238,7 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
         }
         offset += p.base_->nodeList_[xi].r_ * bitvectorSize_InWords;
     }
+
     cudaMemcpy(bvPtr, tempBvPtr, sizeof(uint64_t) * bitvectorWordCount, cudaMemcpyHostToDevice);
     delete[] tempBvPtr;
 
@@ -246,6 +255,7 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
 
     p.queryCountPtr = new int;
     *p.queryCountPtr = 0;
+
     for (int i = 0; i < MAX_NUM_STREAMS; ++i) {
         cudaStreamCreate(&p.streams[i]);
     }
