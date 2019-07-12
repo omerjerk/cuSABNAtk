@@ -5,7 +5,7 @@
  *  Created: Nov 11, 2015
  *
  *  Author: Jaroslaw Zola <jaroslaw.zola@hush.com>
- *  Copyright (c) 2015-2017 SCoRe Group http://www.score-group.org/
+ *  Copyright (c) 2015-2019 SCoRe Group http://www.score-group.org/
  *  Distributed under the MIT License.
  *  See accompanying file LICENSE.
  */
@@ -98,12 +98,45 @@ struct uint_hash {
 
 }; // struct uint_hash
 
+struct tbb_uint_hash {
+
+    uint64_t hash(const uint_type<1>& x) const { return x.b[0]; }
+
+    bool equal(const uint_type<1>& x, const uint_type<1>& y) const { return (x == y); }
+
+    // Based on 64-bit FNV
+    template <int N> uint64_t hash(const uint_type<N>& x) const {
+        const unsigned char* p = reinterpret_cast<const unsigned char*>(&x.b);
+        const int n = N * sizeof(uint64_t);
+
+        const uint64_t prime = 1099511628211;
+        uint64_t hash = 0xcbf29ce484222325;
+
+        for (int i = 0; i < n; ++i) {
+            hash *= prime;
+            hash ^= p[i];
+        }
+
+        return hash;
+    } // hash
+
+    template <int N> bool equal(const uint_type<N>& x, const uint_type<N>& y) const { return (x == y); }
+
+}; // struct tbb_uint_hash
+
+
 template <int N> inline int fold(const uint_type<N>& x) {
     uint64_t res = x.b[0];
     for (int i = 1; i < N; ++i) res ^= x.b[i];
     res >>= 3;
     return res ^ ((res >> 10) ^ (res >> 20));
 } // fold
+
+
+template <int N> inline int msb(const uint_type<N>& x) {
+    for (int i = N - 1; i >= 0; --i) if (x.b[i] != 0) return (64 * i + 63 - __builtin_clzll(x.b[i]));
+    return -1;
+} // msb
 
 
 template <typename set_type> constexpr int set_max_size() { return 8 * sizeof(set_type); }
@@ -134,7 +167,7 @@ template <int N> inline uint_type<N> set_add(uint_type<N> S, int x) {
     int b = (x >> 6);
     S.b[b] = S.b[b] | (static_cast<uint64_t>(1) << (x - (b << 6)));
     return S;
-} // set add
+} // set_add
 
 
 inline uint64_t set_remove(uint64_t S, int x) { return S & ~(static_cast<uint64_t>(1) << x); }
@@ -234,6 +267,21 @@ template <typename set_type> inline void as_vector(const set_type& S, std::vecto
     v.clear();
     for (int i = 0; i < s; ++i) if (in_set(S, i)) v.push_back(i);
 } // as_vector
+
+
+template <int N> inline bool lexicographical_less(const uint_type<N>& lhs, const uint_type<N>& rhs) {
+    if (lhs == rhs) return false;
+
+    for (int i = 0; i < N; ++i) {
+        uint64_t res = lhs.b[i] ^ rhs.b[i];
+        if (res != 0) {
+            int pos = __builtin_ffsll(res) - 1;
+            return in_set(lhs.b[i], pos);
+        }
+    }
+
+    return false;
+} // lexicographical_less
 
 
 template <int N> inline std::ostream& operator<<(std::ostream& os, const uint_type<N>& S) {
