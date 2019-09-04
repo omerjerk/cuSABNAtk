@@ -20,6 +20,7 @@ void cudaCallBlockCount(
         const uint64_t* aritiesPrefixSum,
         const uint64_t* bvectorsPtr,
         uint64_t* results,
+        uint64_t *resultsPa,
         uint64_t* intermediateStatesPtr,
         cudaStream_t streamId);
 

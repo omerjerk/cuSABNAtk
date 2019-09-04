@@ -89,7 +89,8 @@ public:
                            aritiesPrefixProdPtr_,
                            aritiesPrefixSumPtr_,
                            base_->nodeList_[0].bitvectors, // starting address of our data
-                           resultList_,                    // results array
+                           resultList_,                    // results array for Nijk
+                           resultListPa_,                  // results array for Nij
                            0 /*intermediateResultsPtr_*/,
                            streams[streamId]);             // start of intermediate results
 
@@ -97,7 +98,7 @@ public:
         // execute callback for all non zero results
         for (int i = 0; i < maxConfigCount; ++i) {
             if (resultList_[i] > 0) {
-                F[0](resultList_[i], i);
+                F[0](resultList_[i], resultListPa_[i]);
             }
         }
 
@@ -148,6 +149,7 @@ private:
 
     //results of each configuration of the given query
     uint64_t* resultList_;
+    uint64_t* resultListPa_;
     //intermediate results of a part of query
     //intermediate results of multiple rounds are ANDed to generate the final result
     //this isn't used in case there is only one round
@@ -244,6 +246,7 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
 
     // expected size = (number of configurations in the query) * sizeof(uint64_t)
     cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY);
+    cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY);
     // cudaMallocManaged(&p.intermediateResultsPtr_, sizeof(uint64_t) * 1024 * bitvectorWordCount);
     // memset(p.intermediateResultsPtr_, 0, sizeof(uint64_t) * 1024 * bitvectorWordCount);
 
