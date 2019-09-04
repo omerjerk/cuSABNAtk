@@ -163,31 +163,48 @@ __global__ void counts(
       }
   }
   #else
-  /*
   // fully unroll reduction within a single warp
-  if ((blockSize >= 64) && (tid < 32)) sDataTot[tid] = totSum = totSum + sDataTot[tid + 32];
+  if ((blockSize >= 64) && (tid < 32)) {
+    sDataTot[tid] = totSum = totSum + sDataTot[tid + 32];
+    sDataPa[tid] = paSum = paSum + sDataPa[tid + 32];
+  }
 
   __syncthreads();
 
-  if ((blockSize >= 32) && (tid < 16)) sDataTot[tid] = totSum = totSum + sDataTot[tid + 16];
+  if ((blockSize >= 32) && (tid < 16)) {
+    sDataTot[tid] = totSum = totSum + sDataTot[tid + 16];
+    sDataPa[tid] = paSum = paSum + sDataPa[tid + 16];
+  }
 
   __syncthreads();
 
-  if ((blockSize >= 16) && (tid <  8)) sDataTot[tid] = totSum = totSum + sDataTot[tid +  8];
+  if ((blockSize >= 16) && (tid <  8)) {
+    sDataTot[tid] = totSum = totSum + sDataTot[tid +  8];
+    sDataPa[tid] = paSum = paSum + sDataPa[tid + 8];
+  }
 
   __syncthreads();
 
-  if ((blockSize >= 8) && (tid <  4)) sDataTot[tid] = totSum = totSum + sDataTot[tid +  4];
+  if ((blockSize >= 8) && (tid <  4)) {
+    sDataTot[tid] = totSum = totSum + sDataTot[tid +  4];
+    sDataPa[tid] = paSum = paSum + sDataPa[tid + 4];
+  }
 
   __syncthreads();
 
-  if ((blockSize >= 4) && (tid <  2)) sDataTot[tid] = totSum = totSum + sDataTot[tid +  2];
+  if ((blockSize >= 4) && (tid <  2)) {
+    sDataTot[tid] = totSum = totSum + sDataTot[tid +  2];
+    sDataPa[tid] = paSum = paSum + sDataPa[tid + 2];
+  }
 
   __syncthreads();
 
-  if ((blockSize >= 2) && ( tid <  1)) sDataTot[tid] = totSum = totSum + sDataTot[tid +  1];
+  if ((blockSize >= 2) && ( tid <  1)) {
+    sDataTot[tid] = totSum = totSum + sDataTot[tid +  1];
+    sDataPa[tid] = paSum = paSum + sDataPa[tid + 1];
+  }
 
-  __syncthreads();*/
+  __syncthreads();
 #endif
 
   // write result for this block to global mem
