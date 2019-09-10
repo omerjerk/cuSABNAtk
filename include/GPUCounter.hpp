@@ -74,7 +74,7 @@ public:
             aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[i + 1]]);
         } // for i
 
-        m_copyAritiesToDevice__(arities, aritiesPrefixProd, aritiesPrefixSum);
+        copyAritiesToDevice(arities, aritiesPrefixProd, aritiesPrefixSum);
 
         long int maxConfigCount = aritiesPrefixProd[aritiesPrefixProd.size() - 1] * arities[arities.size() - 1];
         int streamId = *queryCountPtr % MAX_NUM_STREAMS;
@@ -85,9 +85,6 @@ public:
                            base_->bitvectorSize_,          // number of words in each bitvector
                            arities.size(),                 // number of variables in one config
                            maxConfigCount,                 // number of configurations
-                           aritiesPtr_,
-                           aritiesPrefixProdPtr_,
-                           aritiesPrefixSumPtr_,
                            base_->nodeList_[0].bitvectors, // starting address of our data
                            resultList_,                    // results array for Nijk
                            resultListPa_,                  // results array for Nij
@@ -118,13 +115,7 @@ private:
         return resultPtr;
     } // m_getBvPtr__
 
-    void m_copyAritiesToDevice__(const std::vector<uint64_t>& pArities,
-                                 const std::vector<uint64_t>& pAritiesPrefixProd,
-                                 const std::vector<uint64_t>& pAritiesPrefixSum) const {
-        cudaMemcpy(aritiesPtr_, pArities.data(), pArities.size() * sizeof(uint64_t), cudaMemcpyHostToDevice);
-        cudaMemcpy(aritiesPrefixProdPtr_, pAritiesPrefixProd.data(), pAritiesPrefixProd.size() * sizeof(uint64_t), cudaMemcpyHostToDevice);
-        cudaMemcpy(aritiesPrefixSumPtr_, pAritiesPrefixSum.data(), pAritiesPrefixSum.size() * sizeof(uint64_t), cudaMemcpyHostToDevice);
-    } // m_copyAritiesToDevice__
+    
 
 
     struct node {
@@ -154,10 +145,9 @@ private:
     //intermediate results of multiple rounds are ANDed to generate the final result
     //this isn't used in case there is only one round
     uint64_t* intermediateResultsPtr_;
-    uint64_t* aritiesPtr_;
-    uint64_t* aritiesPrefixProdPtr_;
-    uint64_t* aritiesPrefixSumPtr_;
-    int* xiPtr_;
+    // uint64_t* aritiesPtr_;
+    // uint64_t* aritiesPrefixProdPtr_;
+    // uint64_t* aritiesPrefixSumPtr_;
     int* queryCountPtr;
     cudaStream_t streams[MAX_NUM_STREAMS];
 
@@ -251,10 +241,9 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     // memset(p.intermediateResultsPtr_, 0, sizeof(uint64_t) * 1024 * bitvectorWordCount);
 
     // TODO: define a more realistic size later
-    cudaMalloc(&p.aritiesPtr_, sizeof(uint64_t) * 20);
-    cudaMalloc(&p.aritiesPrefixProdPtr_, sizeof(uint64_t) * 20);
-    cudaMalloc(&p.aritiesPrefixSumPtr_, sizeof(uint64_t) * 20);
-    cudaMalloc(&p.xiPtr_, sizeof(int) * 20);
+    // cudaMalloc(&p.aritiesPtr_, sizeof(uint64_t) * 20);
+    // cudaMalloc(&p.aritiesPrefixProdPtr_, sizeof(uint64_t) * 20);
+    // cudaMalloc(&p.aritiesPrefixSumPtr_, sizeof(uint64_t) * 20);
 
     p.queryCountPtr = new int;
     *p.queryCountPtr = 0;
