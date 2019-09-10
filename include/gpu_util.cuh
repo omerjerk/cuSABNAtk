@@ -11,9 +11,9 @@
 #define CUDA_CALLABLE
 #endif
 
-__constant__ uint64_t aritiesPtr_[20];
-__constant__ uint64_t aritiesPrefixProdPtr_[20];
-__constant__ uint64_t aritiesPrefixSumPtr_[20];
+__constant__ uint64_t aritiesPtr_[10];
+__constant__ uint64_t aritiesPrefixProdPtr_[10];
+__constant__ uint64_t aritiesPrefixSumPtr_[10];
 
 void copyAritiesToDevice(const std::vector<uint64_t>& pArities,
   const std::vector<uint64_t>& pAritiesPrefixProd,
