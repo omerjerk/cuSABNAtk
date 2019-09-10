@@ -251,7 +251,6 @@ void cudaCallBlockCount(const uint block_count,
   // cudaDeviceSynchronize();
 
   int threads = nextPow2((words_per_vector + 1) >> 1);
-  printf("threads = %d\n", threads);
 
   dim3 dimBlock(threads, 1, 1);
   dim3 dimGrid(configs_per_query, 1, 1);
