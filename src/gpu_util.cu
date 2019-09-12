@@ -1,10 +1,11 @@
 /***
- *  $Id$
+ * $Id$
  **
- *  File: gpu_util.cu
- *  Created: Mar 22, 2019
+ * File: gpu_util.cu
+ * Created: Mar 22, 2019
  *
- * This code has been derived from NVIDIA samples: cuda-8.0/samples/6_Advanced/reduction
+ * Parts of this code have been derived from NVIDIA samples: cuda-8.0/samples/6_Advanced/reduction
+ * with the following copyright:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +31,8 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *  This file is part of cuSABNAtk.
+ * This file is part of cuSABNAtk.
+ *
  */
 
 #ifndef GPU_UTIL_CU
@@ -60,41 +62,40 @@ template <class T> struct SharedMemory {
 }; // struct SharedMemory
 
 __host__ void copyAritiesToDevice(const std::vector<uint64_t>& pArities,
-  const std::vector<uint64_t>& pAritiesPrefixProd,
-  const std::vector<uint64_t>& pAritiesPrefixSum) {
-  // cudaMemcpyToSymbol(aritiesPtr_, pArities.data(), pArities.size() * sizeof(uint64_t));
-  cudaMemcpyToSymbol(aritiesPrefixProdPtr_, pAritiesPrefixProd.data(), pAritiesPrefixProd.size() * sizeof(uint64_t));
-  cudaMemcpyToSymbol(aritiesPrefixSumPtr_, pAritiesPrefixSum.data(), pAritiesPrefixSum.size() * sizeof(uint64_t));
+                                  const std::vector<uint64_t>& pAritiesPrefixProd,
+                                  const std::vector<uint64_t>& pAritiesPrefixSum) {
+    // cudaMemcpyToSymbol(aritiesPtr_, pArities.data(), pArities.size() * sizeof(uint64_t));
+    cudaMemcpyToSymbol(aritiesPrefixProdPtr_, pAritiesPrefixProd.data(), pAritiesPrefixProd.size() * sizeof(uint64_t));
+    cudaMemcpyToSymbol(aritiesPrefixSumPtr_, pAritiesPrefixSum.data(), pAritiesPrefixSum.size() * sizeof(uint64_t));
 } // m_copyAritiesToDevice__
 
 
 template <class T, unsigned int blockSize, bool nIsPow2>
-__global__ void counts(
-                        const T* g_idata,
-                        T* g_odata,
-                        T* g_odataPa,
-                        T* g_rdata,
-                        unsigned int words_per_vector, //m/64
-                        const int vectors_per_config, //number of variables in a query
-                        const int configs_per_query /* number of configs*/) {
+__global__ void counts(const T* g_idata,
+                       T* g_odata,
+                       T* g_odataPa,
+                       T* g_rdata,
+                       unsigned int words_per_vector, // m / 64
+                       int vectors_per_config, // number of variables in a query
+                       int configs_per_query /* number of configs*/) {
     T* sDataPa = SharedMemory<T>();
     T* sDataTot = &sDataPa[blockSize];
 
     unsigned int tid = threadIdx.x;
     unsigned int i = blockIdx.x * blockSize + threadIdx.x;
-    unsigned int word_index = i % blockSize; // cant this be tid
+    unsigned int word_index = i % blockSize; // can't this be tid?
 
     T totSum = 0;
     T paSum = 0;
-    int temp = ((blockIdx.x/aritiesPrefixProdPtr_[0]) % 2);
+    int temp = ((blockIdx.x / aritiesPrefixProdPtr_[0]) % 2);
     T xiBitVect = *(((uint64_t*)g_idata) + ((aritiesPrefixSumPtr_[0] + temp) * words_per_vector) + word_index);
 
-    temp = ((blockIdx.x/aritiesPrefixProdPtr_[1]) % 2);
+    temp = ((blockIdx.x / aritiesPrefixProdPtr_[1]) % 2);
     T paBitVect = *(((uint64_t*)g_idata) + ((aritiesPrefixSumPtr_[1] + temp) * words_per_vector) + word_index);
 
     // running sum for all word slices
     for (int p = 2; p < vectors_per_config; ++p) {
-        temp = ((blockIdx.x/aritiesPrefixProdPtr_[p]) % 2);
+        temp = ((blockIdx.x / aritiesPrefixProdPtr_[p]) % 2);
         paBitVect = paBitVect & *(((uint64_t*)g_idata) + ((aritiesPrefixSumPtr_[p] + temp) * words_per_vector) + word_index);
     }
 
@@ -108,14 +109,14 @@ __global__ void counts(
     // ensure we don't read out of bounds -- this is optimized away for power of 2 sized arrays
     if (nIsPow2 || (tid + blockSize < words_per_vector)) {
         unsigned int word_index_upper_half = word_index + blockSize;
-        temp = ((blockIdx.x/aritiesPrefixProdPtr_[0]) % 2);
+        temp = ((blockIdx.x / aritiesPrefixProdPtr_[0]) % 2);
         xiBitVect = *(((uint64_t*)g_idata) + ((aritiesPrefixSumPtr_[0] + temp) * words_per_vector) + word_index_upper_half);
 
-        temp = ((blockIdx.x/aritiesPrefixProdPtr_[1]) % 2);
+        temp = ((blockIdx.x / aritiesPrefixProdPtr_[1]) % 2);
         paBitVect = *(((uint64_t*)g_idata) + ((aritiesPrefixSumPtr_[1] + temp) * words_per_vector) + word_index_upper_half);
 
         for (int p = 2; p < vectors_per_config; p++) {
-            temp = ((blockIdx.x/aritiesPrefixProdPtr_[p]) % 2);
+            temp = ((blockIdx.x / aritiesPrefixProdPtr_[p]) % 2);
             paBitVect = paBitVect & *(((uint64_t*)g_idata) + ((aritiesPrefixSumPtr_[p] + temp) * words_per_vector) + word_index_upper_half);
         }
 
@@ -224,7 +225,6 @@ __global__ void counts(
 } // counts
 
 
-
 // from cuda samples reduction
 inline unsigned int nextPow2(unsigned int x) {
     --x;
@@ -242,11 +242,11 @@ void cudaCallBlockCount(const uint block_count,
                         const uint per_block_thread_count,
                         const uint words_per_vector,
                         const uint vectors_per_config,
-                        const uint configs_per_query, 
-                        const uint64_t *bvectorsPtr, 
+                        const uint configs_per_query,
+                        const uint64_t *bvectorsPtr,
                         uint64_t *results,
                         uint64_t *resultsPa,
-                        uint64_t *states, 
+                        uint64_t *states,
                         cudaStream_t streamId) {
   // cudaDeviceSynchronize();
 
@@ -254,8 +254,7 @@ void cudaCallBlockCount(const uint block_count,
 
   dim3 dimBlock(threads, 1, 1);
   dim3 dimGrid(configs_per_query, 1, 1);
-  int smemSize = (threads <= 32) ? 2 * threads * sizeof(uint64_t)
-                                 : threads * sizeof(uint64_t);
+  int smemSize = (threads <= 32) ? 2 * threads * sizeof(uint64_t) : threads * sizeof(uint64_t);
   smemSize *= 2;
 
   if (isPow2(words_per_vector) &&
@@ -323,8 +322,8 @@ void cudaCallBlockCount(const uint block_count,
       break;
     }
   } else {
-    switch (threads) {
-    case 512:
+      switch (threads) {
+        case 512:
       counts<uint64_t, 512, false><<<dimGrid, dimBlock, smemSize, streamId>>>(
           bvectorsPtr, results, resultsPa,
           states, words_per_vector, vectors_per_config, configs_per_query);
