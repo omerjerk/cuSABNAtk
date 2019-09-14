@@ -26,7 +26,7 @@
 // TODO: check if these should be hardware dependent
 static const int MAX_COUNTS_PER_QUERY = 1024;
 static const int MAX_INTERMEDIATE_RESULTS = 128;
-static const int MAX_NUM_STREAMS = 3;
+static const int MAX_NUM_STREAMS = 50;
 
 
 struct ResultRecord {
@@ -49,20 +49,29 @@ public:
 
     // FIXME: consider cases when |xa_vect| is greater than 1
     template <typename score_functor>
-    void apply(const std::vector<int>& xa_vect, const std::vector<int>& pa_vect, std::vector<score_functor>& F) {
+    void apply(const std::vector<int>& xa_vect, const std::vector<int>& pa_vect, std::vector<score_functor>& F) const {
+        std::vector<int> xi;
+
+        std::vector<uint64_t> arities;
+        std::vector<uint64_t> aritiesPrefixProd;
+        std::vector<uint64_t> aritiesPrefixSum;
 
         // build arities list
-        xi[0] = xa_vect[0];
-        arities[0] = r(xi[0]);
-        aritiesPrefixProd[0] = 1;
-        aritiesPrefixSum[0] = aritiesPrefixSumGlobal_[xi[0]];
+        xi.push_back(xa_vect[0]);
+        arities.push_back(r(xi[0]));
+        aritiesPrefixProd.push_back(1);
+        aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[0]]);
 
-        for (int i = 0; i < pa_vect.size(); ++i) {
-            xi[i+1] = pa_vect[i];
+        int arity = 0;
 
-            arities[i+1] = r(xi[i + 1]);
-            aritiesPrefixProd[i+1] = aritiesPrefixProd[i] * arities[i];
-            aritiesPrefixSum[i+1] = aritiesPrefixSumGlobal_[xi[i + 1]];
+        for (int i = 0; i < pa_vect.size(); i++) {
+            xi.push_back(pa_vect[i]);
+
+            arity = r(xi[i + 1]);
+
+            arities.push_back(arity);
+            aritiesPrefixProd.push_back(aritiesPrefixProd[i] * arities[i]);
+            aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[i + 1]]);
         } // for i
 
         copyAritiesToDevice(arities, aritiesPrefixProd, aritiesPrefixSum);
@@ -137,11 +146,6 @@ private:
     uint64_t* intermediateResultsPtr_;
     int* queryCountPtr;
     cudaStream_t streams[MAX_NUM_STREAMS];
-
-    std::vector<uint64_t> arities = std::vector<uint64_t>(10, 0);
-    std::vector<uint64_t> aritiesPrefixProd = std::vector<uint64_t>(10, 0);
-    std::vector<uint64_t> aritiesPrefixSum = std::vector<uint64_t>(10, 0);
-    std::vector<int> xi = std::vector<int>(10, 0);
 
     template <int M, typename Iter>
     friend GPUCounter<M> create_GPUCounter(int, int, Iter);
