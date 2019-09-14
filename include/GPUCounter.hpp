@@ -28,11 +28,22 @@ static const int MAX_COUNTS_PER_QUERY = 1024;
 static const int MAX_INTERMEDIATE_RESULTS = 128;
 static const int MAX_NUM_STREAMS = 50;
 
-
 struct ResultRecord {
-    unsigned long long mCount;
-    uint64_t* mResultPtr;
+    int maxConfigCount;
+    void (*F)(int, int);
+    uint64_t* resultListPa_;
+    uint64_t* resultList_;
 }; // struct ResultRecord
+
+static void resultCallback(cudaStream_t stream, cudaError_t status, void* userData) {
+    ResultRecord* rr = (ResultRecord*) userData;
+
+    for (int i = 0; i < rr->maxConfigCount; ++i) {
+        if (rr->resultList_[i] > 0) {
+            // rr->F(rr->resultList_[i], rr->resultListPa_[i]);
+        }
+    }
+}
 
 
 template <int N> class GPUCounter {
@@ -79,6 +90,12 @@ public:
         int maxConfigCount = aritiesPrefixProd[aritiesPrefixProd.size() - 1] * arities[arities.size() - 1];
         int streamId = *queryCountPtr % MAX_NUM_STREAMS;
 
+        ResultRecord* rr = new ResultRecord;
+        rr->resultList_ = resultList_;
+        rr->resultListPa_ = resultListPa_;
+        rr->maxConfigCount = maxConfigCount;
+        // rr->F = (&F[0])->update;
+
         // call gpu kernel on each subgroup
         cudaCallBlockCount(65535,                          // device limit, not used
                            1024,                           // device limit, not used
@@ -89,15 +106,9 @@ public:
                            resultList_,                    // results array for Nijk
                            resultListPa_,                  // results array for Nij
                            0 /*intermediateResultsPtr_*/,
-                           streams[streamId]);             // start of intermediate results
-
-        // TODO: can we overlap this with GPGPU execution
-        // execute callback for all non zero results
-        for (int i = 0; i < maxConfigCount; ++i) {
-            if (resultList_[i] > 0) {
-                F[0](resultList_[i], resultListPa_[i]);
-            }
-        }
+                           streams[streamId],
+                           resultCallback,
+                           rr);             // start of intermediate results
 
         ++*queryCountPtr;
     } // apply

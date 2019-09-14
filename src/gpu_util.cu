@@ -247,7 +247,8 @@ void cudaCallBlockCount(const uint block_count,
                         uint64_t *results,
                         uint64_t *resultsPa,
                         uint64_t *states,
-                        cudaStream_t streamId) {
+                        cudaStream_t streamId,
+                        cudaStreamCallback_t callback, void* userData) {
   // cudaDeviceSynchronize();
 
   int threads = nextPow2((words_per_vector + 1) >> 1);
@@ -385,7 +386,7 @@ void cudaCallBlockCount(const uint block_count,
     }
   }
 
-  cudaStreamSynchronize(streamId);
+  cudaStreamAddCallback(streamId, callback, userData, 0);
 
 } // cudaCallBlockCount
 

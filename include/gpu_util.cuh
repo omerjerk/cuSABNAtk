@@ -29,6 +29,7 @@ void cudaCallBlockCount(const uint block_count,
                         uint64_t* results,
                         uint64_t *resultsPa,
                         uint64_t* intermediateStatesPtr,
-                        cudaStream_t streamId);
+                        cudaStream_t streamId,
+                        cudaStreamCallback_t callback, void* userData);
 
 #endif // GPU_UTIL
