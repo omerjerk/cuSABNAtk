@@ -26,24 +26,34 @@
 // TODO: check if these should be hardware dependent
 static const int MAX_COUNTS_PER_QUERY = 1024;
 static const int MAX_INTERMEDIATE_RESULTS = 128;
-static const int MAX_NUM_STREAMS = 50;
+static const int MAX_NUM_STREAMS = 64;
 
-struct ResultRecord {
+
+template <typename score_functor> struct ResultRecord {
+    ResultRecord(std::vector<score_functor>& aF) : F(aF) { }
+
+    uint64_t* resultListPa;
+    uint64_t* resultList;
     int maxConfigCount;
-    void (*F)(int, int);
-    uint64_t* resultListPa_;
-    uint64_t* resultList_;
+
+    std::vector<score_functor>& F;
+
+    static void CUDART_CB callback(cudaStream_t stream, cudaError_t status, void* userData);
+
 }; // struct ResultRecord
 
-static void resultCallback(cudaStream_t stream, cudaError_t status, void* userData) {
-    ResultRecord* rr = (ResultRecord*) userData;
 
-    for (int i = 0; i < rr->maxConfigCount; ++i) {
-        if (rr->resultList_[i] > 0) {
-            // rr->F(rr->resultList_[i], rr->resultListPa_[i]);
+template <typename score_functor>
+void CUDART_CB ResultRecord<score_functor>::callback(cudaStream_t stream,  cudaError_t status, void* userData) {
+    ResultRecord<score_functor>* self = (ResultRecord<score_functor>*)(userData);
+
+    // currently we are assuming we have processed only one Xi (hence F[0])
+    for (int i = 0; i < self->maxConfigCount; ++i) {
+        if (self->resultList[i] > 0) {
+            self->F[0](self->resultList[i], self->resultListPa[i]);
         }
     }
-}
+} // ResultRecord::callback
 
 
 template <int N> class GPUCounter {
@@ -61,14 +71,14 @@ public:
     // FIXME: consider cases when |xa_vect| is greater than 1
     template <typename score_functor>
     void apply(const std::vector<int>& xa_vect, const std::vector<int>& pa_vect, std::vector<score_functor>& F) const {
-        std::vector<int> xi;
+        std::vector<int> xi(1 + pa_vect.size());
+        xi[0] = xa_vect[0];
 
         std::vector<uint64_t> arities;
         std::vector<uint64_t> aritiesPrefixProd;
         std::vector<uint64_t> aritiesPrefixSum;
 
         // build arities list
-        xi.push_back(xa_vect[0]);
         arities.push_back(r(xi[0]));
         aritiesPrefixProd.push_back(1);
         aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[0]]);
@@ -76,8 +86,7 @@ public:
         int arity = 0;
 
         for (int i = 0; i < pa_vect.size(); i++) {
-            xi.push_back(pa_vect[i]);
-
+            xi[i + 1] = pa_vect[i];
             arity = r(xi[i + 1]);
 
             arities.push_back(arity);
@@ -90,11 +99,13 @@ public:
         int maxConfigCount = aritiesPrefixProd[aritiesPrefixProd.size() - 1] * arities[arities.size() - 1];
         int streamId = *queryCountPtr % MAX_NUM_STREAMS;
 
-        ResultRecord* rr = new ResultRecord;
-        rr->resultList_ = resultList_;
-        rr->resultListPa_ = resultListPa_;
-        rr->maxConfigCount = maxConfigCount;
-        // rr->F = (&F[0])->update;
+        // rr must be stored internally and released once callback has been executed
+        // not clear yet to how to approach that
+        ResultRecord<score_functor> rr(F);
+
+        rr.resultList = resultList_;
+        rr.resultListPa = resultListPa_;
+        rr.maxConfigCount = maxConfigCount;
 
         // call gpu kernel on each subgroup
         cudaCallBlockCount(65535,                          // device limit, not used
@@ -106,9 +117,9 @@ public:
                            resultList_,                    // results array for Nijk
                            resultListPa_,                  // results array for Nij
                            0 /*intermediateResultsPtr_*/,
-                           streams[streamId],
-                           resultCallback,
-                           rr);             // start of intermediate results
+                           streams[streamId]);
+
+        cudaStreamAddCallback(streams[streamId], ResultRecord<score_functor>::callback, &rr, 0);
 
         ++*queryCountPtr;
     } // apply
