@@ -25,8 +25,6 @@
 
 // TODO: check if these should be hardware dependent
 static const int MAX_COUNTS_PER_QUERY = 1024;
-static const int MAX_INTERMEDIATE_RESULTS = 128;
-static const int MAX_NUM_STREAMS = 64;
 
 
 template <typename score_functor> struct ResultRecord {
@@ -58,7 +56,13 @@ void CUDART_CB ResultRecord<score_functor>::callback(cudaStream_t stream,  cudaE
 
 template <int N> class GPUCounter {
 public:
-    typedef uint_type<N> set_type;
+    using set_type = uint_type<N>;
+
+    ~GPUCounter() {
+        cudaFree(&base_->bvPtr_);
+        delete[] nodeList_;
+        delete base_;
+    } // GPUCounter
 
     int n() const { return base_->n_; }
 
@@ -69,8 +73,9 @@ public:
     bool is_reorderable() { return false; }
 
     // FIXME: consider cases when |xa_vect| is greater than 1
+    //        SABNAtk assumes that apply() is const, to allow CUDA concurrency, we are changing that
     template <typename score_functor>
-    void apply(const std::vector<int>& xa_vect, const std::vector<int>& pa_vect, std::vector<score_functor>& F) const {
+    void apply(const std::vector<int>& xa_vect, const std::vector<int>& pa_vect, std::vector<score_functor>& F) {
         std::vector<int> xi(1 + pa_vect.size());
         xi[0] = xa_vect[0];
 
@@ -97,7 +102,7 @@ public:
         copyAritiesToDevice(arities, aritiesPrefixProd, aritiesPrefixSum);
 
         int maxConfigCount = aritiesPrefixProd[aritiesPrefixProd.size() - 1] * arities[arities.size() - 1];
-        int streamId = *queryCountPtr % MAX_NUM_STREAMS;
+        int streamId = queryCountPtr % MAX_NUM_STREAMS_;
 
         // rr must be stored internally and released once callback has been executed
         // not clear yet to how to approach that
@@ -121,7 +126,7 @@ public:
 
         cudaStreamAddCallback(streams[streamId], ResultRecord<score_functor>::callback, &rr, 0);
 
-        ++*queryCountPtr;
+        ++queryCountPtr;
     } // apply
 
 private:
@@ -147,14 +152,15 @@ private:
         int n_;
         int m_;
         int bitvectorSize_;
+        uint64_t* bvPtr_;
         node* nodeList_;
     }; // struct base
 
     // minimal description of the input data
-    base* base_;
+    base* base_ = nullptr;
 
     // contains GPU memory addresses where each particular value of xi starts
-    node* nodeList_;
+    node* nodeList_ = nullptr;
 
     std::vector<int> aritiesPrefixSumGlobal_;
 
@@ -162,12 +168,12 @@ private:
     uint64_t* resultList_;
     uint64_t* resultListPa_;
 
-    // intermediate results of a part of query
-    // intermediate results of multiple rounds are ANDed to generate the final result
-    // this isn't used in case there is only one round
-    uint64_t* intermediateResultsPtr_;
-    int* queryCountPtr;
-    cudaStream_t streams[MAX_NUM_STREAMS];
+    int queryCountPtr = 0;
+
+    // MAX_NUM_STREAMS should be runtime parameter decided on data
+    // and with respect to user provided hints
+    int MAX_NUM_STREAMS_ = 64;
+    std::vector<cudaStream_t> streams;
 
     template <int M, typename Iter>
     friend GPUCounter<M> create_GPUCounter(int, int, Iter);
@@ -175,9 +181,11 @@ private:
 
 
 // TODO: add option to select which CUDA device to use
+//       we should be also configuring number of streams automatically
 template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, Iter it) {
     int devicesCount = 0;
     cudaGetDeviceCount(&devicesCount);
+
     if (devicesCount == 0) throw std::runtime_error("no CUDA capable devices found");
 
     GPUCounter<N> p;
@@ -219,6 +227,8 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     uint64_t* bvPtr = nullptr;
     cudaMalloc(&bvPtr, sizeof(uint64_t) * bitvectorWordCount);
 
+    p.base_->bvPtr_ = bvPtr;
+
     // set bitvector addresses (device addrs) in node list (host mem)
     int offset = 0;
 
@@ -256,10 +266,9 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY);
     cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY);
 
-    p.queryCountPtr = new int;
-    *p.queryCountPtr = 0;
+    p.streams.resize(p.MAX_NUM_STREAMS_);
 
-    for (int i = 0; i < MAX_NUM_STREAMS; ++i) {
+    for (int i = 0; i < p.MAX_NUM_STREAMS_; ++i) {
         cudaStreamCreate(&p.streams[i]);
     }
 
