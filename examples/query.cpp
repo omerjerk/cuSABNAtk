@@ -105,15 +105,22 @@ std::tuple<std::vector<std::vector<int>>, std::vector<std::vector<int>>> get_ben
 template <typename Engine>
 double test_queries(Engine& qe, int nt,
                     const std::vector<std::vector<int>>& xis,
-                    const std::vector<std::vector<int>>& pas) {
+                    const std::vector<std::vector<int>>& pas,
+                    jaz::Logger& Log) {
 
     std::vector<Call> F(1);
 
     auto t0 = std::chrono::system_clock::now();
 
-    #pragma omp parallel for firstprivate(F) shared(qe, xis, pas)
+    #pragma omp parallel
+    {
+        #pragma omp single wait
+        Log.info() << "running with " << omp_get_num_threads() << " threads" << std::endl;
 
-    for (int i = 0; i < nt; ++i) qe.apply(xis[i], pas[i], F);
+        #pragma omp for firstprivate(F) shared(qe, xis, pas)
+        for (int i = 0; i < nt; ++i) qe.apply(xis[i], pas[i], F);
+    }
+
     auto t1 = std::chrono::system_clock::now();
 
     return std::chrono::duration<double>(t1 - t0).count();
@@ -173,12 +180,12 @@ int main(int argc, char* argv[]) {
 
         /*
           Log.info() << "testing GPU..." << std::endl;
-          auto gput = test_queries(gcount, xis, pas);
+          auto gput = test_queries(gcount, xis, pas, Log);
           Log.info() << "time for " << nt << " queries with " << nq << " variables: " <<  jaz::log::second_to_time(gput) << std::endl;
         */
 
         Log.info() << "testing Rad..." << std::endl;
-        auto radt = test_queries(rad, nt, xis, pas);
+        auto radt = test_queries(rad, nt, xis, pas, Log);
         Log.info() << "time for " << nt << " queries with " << nq << " variables: " <<  jaz::log::second_to_time(radt) << std::endl;
 
         Log.info() << "GPU speedup: " << (radt / gput) << std::endl;
