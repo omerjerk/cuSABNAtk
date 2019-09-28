@@ -112,12 +112,12 @@ double test_queries(Engine& qe, int nt,
 
     auto t0 = std::chrono::system_clock::now();
 
-    #pragma omp parallel
+    #pragma omp parallel shared(qe, xis, pas)
     {
-        #pragma omp single wait
+        #pragma omp single
         Log.info() << "running with " << omp_get_num_threads() << " threads" << std::endl;
 
-        #pragma omp for firstprivate(F) shared(qe, xis, pas)
+        #pragma omp for firstprivate(F)
         for (int i = 0; i < nt; ++i) qe.apply(xis[i], pas[i], F);
     }
 
