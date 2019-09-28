@@ -26,6 +26,14 @@
 
 #include "csv.hpp"
 
+#ifdef _OPENMP
+#include <omp.h>
+#else
+inline int omp_get_num_threads() { return 1; }
+inline int omp_get_thread_num() { return 0; }
+#endif
+
+
 
 struct Call {
     void init(int, int) { score_ = 0; }
@@ -94,13 +102,31 @@ std::tuple<std::vector<std::vector<int>>, std::vector<std::vector<int>>> get_ben
 } // get_benchmark_queries
 
 
+template <typename Engine>
+double test_queries(Engine& qe, int nt,
+                    const std::vector<std::vector<int>>& xis,
+                    const std::vector<std::vector<int>>& pas) {
+
+    std::vector<Call> F(1);
+
+    auto t0 = std::chrono::system_clock::now();
+
+    #pragma omp parallel for firstprivate(F) shared(qe, xis, pas)
+
+    for (int i = 0; i < nt; ++i) qe.apply(xis[i], pas[i], F);
+    auto t1 = std::chrono::system_clock::now();
+
+    return std::chrono::duration<double>(t1 - t0).count();
+} // test_queries
+
+
 int main(int argc, char* argv[]) {
     using set_type = typename GPUCounter<3>::set_type;
     jaz::Logger Log;
 
     if ((argc != 3) && (argc != 5)) {
-        std::cout << "Normal usage: " << argv[0] << " <data_file> <query_file>" << std::endl;
-        std::cout << "Benchmark usage: " << argv[0] << " <data_file> benchmark <# iterations> <# variables>" << std::endl;
+        std::cout << "standard mode: " << argv[0] << " <data_file> <query_file>" << std::endl;
+        std::cout << "benchmark mode: " << argv[0] << " <data_file> benchmark <# iterations> <# variables>" << std::endl;
         return 0;
     }
 
@@ -140,28 +166,19 @@ int main(int argc, char* argv[]) {
 
         std::vector<std::vector<int>> xis;
         std::vector<std::vector<int>> pas;
-        std::vector<Call> F(1);
 
         std::tie(xis, pas) = get_benchmark_queries(n, nt, nq);
 
-        Log.info() << "testing GPU..." << std::endl;
+        int gput = 1;
 
-        auto t0 = std::chrono::system_clock::now();
-        for (int i = 0; i < nt; ++i) gcount.apply(xis[i], pas[i], F);
-        auto t1 = std::chrono::system_clock::now();
-
-        auto gput = std::chrono::duration<double>(t1 - t0).count();
-
-        Log.info() << "time for " << nt << " queries with " << nq << " variables: " <<  jaz::log::second_to_time(gput) << std::endl;
+        /*
+          Log.info() << "testing GPU..." << std::endl;
+          auto gput = test_queries(gcount, xis, pas);
+          Log.info() << "time for " << nt << " queries with " << nq << " variables: " <<  jaz::log::second_to_time(gput) << std::endl;
+        */
 
         Log.info() << "testing Rad..." << std::endl;
-
-        t0 = std::chrono::system_clock::now();
-        for (int i = 0; i < nt; ++i) rad.apply(xis[i], pas[i], F);
-        t1 = std::chrono::system_clock::now();
-
-        auto radt = std::chrono::duration<double>(t1 - t0).count();
-
+        auto radt = test_queries(rad, nt, xis, pas);
         Log.info() << "time for " << nt << " queries with " << nq << " variables: " <<  jaz::log::second_to_time(radt) << std::endl;
 
         Log.info() << "GPU speedup: " << (radt / gput) << std::endl;
