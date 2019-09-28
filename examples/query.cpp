@@ -176,13 +176,9 @@ int main(int argc, char* argv[]) {
 
         std::tie(xis, pas) = get_benchmark_queries(n, nt, nq);
 
-        int gput = 1;
-
-        /*
-          Log.info() << "testing GPU..." << std::endl;
-          auto gput = test_queries(gcount, xis, pas, Log);
-          Log.info() << "time for " << nt << " queries with " << nq << " variables: " <<  jaz::log::second_to_time(gput) << std::endl;
-        */
+        Log.info() << "testing GPU..." << std::endl;
+        auto gput = test_queries(gcount, xis, pas, Log);
+        Log.info() << "time for " << nt << " queries with " << nq << " variables: " <<  jaz::log::second_to_time(gput) << std::endl;
 
         Log.info() << "testing Rad..." << std::endl;
         auto radt = test_queries(rad, nt, xis, pas, Log);
