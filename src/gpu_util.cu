@@ -385,6 +385,8 @@ void cudaCallBlockCount(const uint block_count,
     }
   }
 
+  cudaStreamSynchronize(streamId);
+
 } // cudaCallBlockCount
 
 #endif // GPU_UTIL_CU

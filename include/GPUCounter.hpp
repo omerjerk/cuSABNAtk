@@ -16,6 +16,7 @@
 
 #include <cinttypes>
 #include <vector>
+#include <atomic>
 
 #include <cuda_runtime.h>
 
@@ -27,33 +28,6 @@
 static const int MAX_COUNTS_PER_QUERY = 1024;
 
 
-template <typename score_functor> struct ResultRecord {
-    ResultRecord(std::vector<score_functor>& aF) : F(aF) { }
-
-    uint64_t* resultListPa;
-    uint64_t* resultList;
-    int maxConfigCount;
-
-    std::vector<score_functor>& F;
-
-    static void CUDART_CB callback(cudaStream_t stream, cudaError_t status, void* userData);
-
-}; // struct ResultRecord
-
-
-template <typename score_functor>
-void CUDART_CB ResultRecord<score_functor>::callback(cudaStream_t stream,  cudaError_t status, void* userData) {
-    ResultRecord<score_functor>* self = (ResultRecord<score_functor>*)(userData);
-
-    // currently we are assuming we have processed only one Xi (hence F[0])
-    for (int i = 0; i < self->maxConfigCount; ++i) {
-        if (self->resultList[i] > 0) {
-            self->F[0](self->resultList[i], self->resultListPa[i]);
-        }
-    }
-} // ResultRecord::callback
-
-
 template <int N> class GPUCounter {
 public:
     using set_type = uint_type<N>;
@@ -62,6 +36,7 @@ public:
         cudaFree(&base_->bvPtr_);
         delete[] nodeList_;
         delete base_;
+        delete queryCountPtr;
     } // GPUCounter
 
     int n() const { return base_->n_; }
@@ -102,15 +77,7 @@ public:
         copyAritiesToDevice(arities, aritiesPrefixProd, aritiesPrefixSum);
 
         int maxConfigCount = aritiesPrefixProd[aritiesPrefixProd.size() - 1] * arities[arities.size() - 1];
-        int streamId = queryCountPtr % MAX_NUM_STREAMS_;
-
-        // rr must be stored internally and released once callback has been executed
-        // not clear yet to how to approach that
-        ResultRecord<score_functor> rr(F);
-
-        rr.resultList = resultList_;
-        rr.resultListPa = resultListPa_;
-        rr.maxConfigCount = maxConfigCount;
+        int streamId = *queryCountPtr % MAX_NUM_STREAMS_;
 
         // call gpu kernel on each subgroup
         cudaCallBlockCount(65535,                          // device limit, not used
@@ -124,9 +91,13 @@ public:
                            0 /*intermediateResultsPtr_*/,
                            streams[streamId]);
 
-        cudaStreamAddCallback(streams[streamId], ResultRecord<score_functor>::callback, &rr, 0);
+        for (int i = 0; i < maxConfigCount; ++i) {
+            if (resultList_[i] > 0) {
+                F[0](resultList_[i], resultListPa_[i]);
+            }
+        }
 
-        ++queryCountPtr;
+        *++queryCountPtr;
     } // apply
 
 private:
@@ -168,7 +139,7 @@ private:
     uint64_t* resultList_;
     uint64_t* resultListPa_;
 
-    int queryCountPtr = 0;
+    std::atomic_int* queryCountPtr;
 
     // MAX_NUM_STREAMS should be runtime parameter decided on data
     // and with respect to user provided hints
@@ -267,6 +238,7 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY);
 
     p.streams.resize(p.MAX_NUM_STREAMS_);
+    p.queryCountPtr = new std::atomic_int(0);
 
     for (int i = 0; i < p.MAX_NUM_STREAMS_; ++i) {
         cudaStreamCreate(&p.streams[i]);

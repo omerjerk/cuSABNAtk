@@ -177,7 +177,7 @@ int main(int argc, char* argv[]) {
         std::tie(xis, pas) = get_benchmark_queries(n, nt, nq);
 
         Log.info() << "testing GPU..." << std::endl;
-        auto gput = test_queries(gcount, xis, pas, Log);
+        auto gput = test_queries(gcount, nt, xis, pas, Log);
         Log.info() << "time for " << nt << " queries with " << nq << " variables: " <<  jaz::log::second_to_time(gput) << std::endl;
 
         Log.info() << "testing Rad..." << std::endl;
