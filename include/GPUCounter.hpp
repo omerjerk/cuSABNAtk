@@ -21,6 +21,7 @@
 #include <atomic>
 
 #include <cuda_runtime.h>
+#include <omp.h>
 
 #include "bit_util.hpp"
 #include "gpu_util.cuh"
@@ -77,8 +78,7 @@ public:
 
         int maxConfigCount = aritiesPrefixProd[aritiesPrefixProd.size() - 1] * arities[arities.size() - 1];
         // printf("query count = %d\n", queryCountPtr->load());
-        int streamId = queryCountPtr->load() % 32;
-        // printf("done with kernel sid = %d\n", streamId);
+        int streamId = omp_get_thread_num() % 32;
 
         copyAritiesToDevice(streamId, arities, aritiesPrefixProd, aritiesPrefixSum);
 
@@ -93,6 +93,7 @@ public:
                            resultListPa_,                  // results array for Nij
                            0,
                            streamId);
+        // printf("done with kernel sid = %d\n", streamId);
 
         for (int i = 0; i < maxConfigCount; ++i) {
             if (resultList_[(streamId * MAX_COUNTS_PER_QUERY) + i] > 0) {
@@ -100,7 +101,7 @@ public:
             }
         }
 
-        *queryCountPtr += 1;
+        // *queryCountPtr += 1;
     } // apply
 
 private:
