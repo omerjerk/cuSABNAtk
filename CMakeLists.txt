@@ -23,7 +23,9 @@ ENDIF()
 
 INCLUDE(CheckCXXCompilerFlag)
 
-FIND_PACKAGE(CUDA 9.0 REQUIRED)
+FIND_PACKAGE(CUDA 10.0 REQUIRED)
+
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --default-stream per-thread" )
 
 INCLUDE_DIRECTORIES(include/ .)
 

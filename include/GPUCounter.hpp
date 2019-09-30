@@ -76,7 +76,9 @@ public:
         } // for i
 
         int maxConfigCount = aritiesPrefixProd[aritiesPrefixProd.size() - 1] * arities[arities.size() - 1];
-        int streamId = *queryCountPtr % MAX_NUM_STREAMS_;
+        // printf("query count = %d\n", queryCountPtr->load());
+        int streamId = queryCountPtr->load() % 32;
+        // printf("done with kernel sid = %d\n", streamId);
 
         copyAritiesToDevice(streamId, arities, aritiesPrefixProd, aritiesPrefixSum);
 
@@ -98,7 +100,7 @@ public:
             }
         }
 
-        *++queryCountPtr;
+        *queryCountPtr += 1;
     } // apply
 
 private:
