@@ -14,6 +14,8 @@
 #ifndef GPU_COUNTER_HPP
 #define GPU_COUNTER_HPP
 
+#define CUDA_API_PER_THREAD_DEFAULT_STREAM
+
 #include <cinttypes>
 #include <vector>
 #include <atomic>
@@ -36,7 +38,6 @@ public:
         cudaFree(&base_->bvPtr_);
         delete[] nodeList_;
         delete base_;
-        delete queryCountPtr;
     } // GPUCounter
 
     int n() const { return base_->n_; }
@@ -74,10 +75,10 @@ public:
             aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[i + 1]]);
         } // for i
 
-        copyAritiesToDevice(arities, aritiesPrefixProd, aritiesPrefixSum);
-
         int maxConfigCount = aritiesPrefixProd[aritiesPrefixProd.size() - 1] * arities[arities.size() - 1];
         int streamId = *queryCountPtr % MAX_NUM_STREAMS_;
+
+        copyAritiesToDevice(streamId, arities, aritiesPrefixProd, aritiesPrefixSum);
 
         // call gpu kernel on each subgroup
         cudaCallBlockCount(65535,                          // device limit, not used
@@ -88,12 +89,12 @@ public:
                            base_->nodeList_[0].bitvectors, // starting address of our data
                            resultList_,                    // results array for Nijk
                            resultListPa_,                  // results array for Nij
-                           0 /*intermediateResultsPtr_*/,
-                           streams[streamId]);
+                           0,
+                           streamId);
 
         for (int i = 0; i < maxConfigCount; ++i) {
-            if (resultList_[i] > 0) {
-                F[0](resultList_[i], resultListPa_[i]);
+            if (resultList_[(streamId * MAX_COUNTS_PER_QUERY) + i] > 0) {
+                F[0](resultList_[(streamId * MAX_COUNTS_PER_QUERY) + i], resultListPa_[(streamId * MAX_COUNTS_PER_QUERY) + i]);
             }
         }
 
@@ -143,7 +144,7 @@ private:
 
     // MAX_NUM_STREAMS should be runtime parameter decided on data
     // and with respect to user provided hints
-    int MAX_NUM_STREAMS_ = 64;
+    int MAX_NUM_STREAMS_;
     std::vector<cudaStream_t> streams;
 
     template <int M, typename Iter>
@@ -233,9 +234,20 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     cudaMemcpy(bvPtr, tempBvPtr, sizeof(uint64_t) * bitvectorWordCount, cudaMemcpyHostToDevice);
     delete[] tempBvPtr;
 
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0); //assuming that there is just one device
+    //The max number of concurrent kernels on compute capability 7.0+ is 128.
+    //However, limiting it to 64 because I am a bit skeptical that we may actually end up losing
+    //performance with 128 streams
+    if (prop.concurrentKernels > 64) {
+        p.MAX_NUM_STREAMS_ = 64;
+    } else {
+        p.MAX_NUM_STREAMS_ = prop.concurrentKernels;
+    }
+
     // expected size = (number of configurations in the query) * sizeof(uint64_t)
-    cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY);
-    cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY);
+    cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * p.MAX_NUM_STREAMS_);
+    cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * p.MAX_NUM_STREAMS_);
 
     p.streams.resize(p.MAX_NUM_STREAMS_);
     p.queryCountPtr = new std::atomic_int(0);

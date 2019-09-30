@@ -177,14 +177,14 @@ int main(int argc, char* argv[]) {
         std::tie(xis, pas) = get_benchmark_queries(n, nt, nq);
 
         Log.info() << "testing GPU..." << std::endl;
-        auto gput = test_queries(gcount, nt, xis, pas, Log);
-        Log.info() << "time for " << nt << " queries with " << nq << " variables: " <<  jaz::log::second_to_time(gput) << std::endl;
+        // auto gput = test_queries(gcount, nt, xis, pas, Log);
+        // Log.info() << "time for " << nt << " queries with " << nq << " variables: " <<  jaz::log::second_to_time(gput) << std::endl;
 
         Log.info() << "testing Rad..." << std::endl;
         auto radt = test_queries(rad, nt, xis, pas, Log);
         Log.info() << "time for " << nt << " queries with " << nq << " variables: " <<  jaz::log::second_to_time(radt) << std::endl;
 
-        Log.info() << "GPU speedup: " << (radt / gput) << std::endl;
+        // Log.info() << "GPU speedup: " << (radt / gput) << std::endl;
     } else {
         // execute the query
         std::vector<int> paVec;

@@ -12,13 +12,15 @@
 #define CUDA_CALLABLE
 #endif
 
-__constant__ uint64_t aritiesPtr_[10];
-__constant__ uint64_t aritiesPrefixProdPtr_[10];
-__constant__ uint64_t aritiesPrefixSumPtr_[10];
+__constant__ uint64_t aritiesPtr_[64][10];
+__constant__ uint64_t aritiesPrefixProdPtr_[64][10];
+__constant__ uint64_t aritiesPrefixSumPtr_[64][10];
 
-void copyAritiesToDevice(const std::vector<uint64_t>& pArities,
-                         const std::vector<uint64_t>& pAritiesPrefixProd,
-                         const std::vector<uint64_t>& pAritiesPrefixSum);
+void copyAritiesToDevice(
+                        int streamId,
+                        const std::vector<uint64_t>& pArities,
+                        const std::vector<uint64_t>& pAritiesPrefixProd,
+                        const std::vector<uint64_t>& pAritiesPrefixSum);
 
 void cudaCallBlockCount(const uint block_count,
                         const uint per_block_thread_count,
@@ -29,6 +31,6 @@ void cudaCallBlockCount(const uint block_count,
                         uint64_t* results,
                         uint64_t *resultsPa,
                         uint64_t* intermediateStatesPtr,
-                        cudaStream_t streamId);
+                        int streamId);
 
 #endif // GPU_UTIL
