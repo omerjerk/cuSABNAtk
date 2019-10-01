@@ -106,20 +106,27 @@ template <typename Engine>
 double test_queries(Engine& qe, int nt,
                     const std::vector<std::vector<int>>& xis,
                     const std::vector<std::vector<int>>& pas,
-                    jaz::Logger& Log) {
+                    jaz::Logger& Log,
+                    int numThreads) {
 
     std::vector<Call> F(1);
 
     auto t0 = std::chrono::system_clock::now();
 
-    #pragma omp parallel shared(qe, xis, pas)
-    {
-        #pragma omp single
-        Log.info() << "running with " << omp_get_num_threads() << " threads" << std::endl;
+    // #pragma omp parallel
+    // {
+        // #pragma omp single
+        // Log.info() << "running with " << omp_get_num_threads() << " threads" << std::endl;
 
-        #pragma omp for firstprivate(F)
-        for (int i = 0; i < nt; ++i) qe.apply(xis[i], pas[i], F);
-    }
+        if (numThreads == -1) {
+            #pragma omp parallel for firstprivate(F) shared(qe, xis, pas)
+            for (int i = 0; i < nt; ++i) qe.apply(xis[i], pas[i], F);
+        } else {
+            #pragma omp parallel for num_threads(numThreads) firstprivate(F) shared(qe, xis, pas)
+            for (int i = 0; i < nt; ++i) qe.apply(xis[i], pas[i], F);
+        }
+
+    // }
 
     auto t1 = std::chrono::system_clock::now();
 
@@ -177,11 +184,11 @@ int main(int argc, char* argv[]) {
         std::tie(xis, pas) = get_benchmark_queries(n, nt, nq);
 
         Log.info() << "testing GPU..." << std::endl;
-        auto gput = test_queries(gcount, nt, xis, pas, Log);
+        auto gput = test_queries(gcount, nt, xis, pas, Log, 2);
         Log.info() << "time for " << nt << " queries with " << nq << " variables: " <<  jaz::log::second_to_time(gput) << std::endl;
 
         Log.info() << "testing Rad..." << std::endl;
-        auto radt = test_queries(rad, nt, xis, pas, Log);
+        auto radt = test_queries(rad, nt, xis, pas, Log, -1);
         Log.info() << "time for " << nt << " queries with " << nq << " variables: " <<  jaz::log::second_to_time(radt) << std::endl;
 
         Log.info() << "GPU speedup: " << (radt / gput) << std::endl;
