@@ -19,6 +19,9 @@
 #include <tuple>
 #include <vector>
 
+#include <stdlib.h>
+#include <sched.h>
+
 #include <jaz/logger.hpp>
 
 #include <GPUCounter.hpp>
@@ -122,7 +125,7 @@ double test_queries(Engine& qe, int nt,
             #pragma omp parallel for firstprivate(F) shared(qe, xis, pas)
             for (int i = 0; i < nt; ++i) qe.apply(xis[i], pas[i], F);
         } else {
-            #pragma omp parallel for num_threads(numThreads) firstprivate(F) shared(qe, xis, pas)
+            #pragma omp parallel for firstprivate(F) shared(qe, xis, pas)
             for (int i = 0; i < nt; ++i) qe.apply(xis[i], pas[i], F);
         }
 
@@ -167,6 +170,7 @@ int main(int argc, char* argv[]) {
 
     GPUCounter<3> gcount = create_GPUCounter<3>(n, m, std::begin(D));
     RadCounter<3> rad = create_RadCounter<3>(n, m, std::begin(D));
+    gcount.initRadCounter(&rad);
 
     if (query_file == "benchmark") {
         // perform the benchmark

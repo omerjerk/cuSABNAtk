@@ -25,6 +25,7 @@
 
 #include "bit_util.hpp"
 #include "gpu_util.cuh"
+#include "RadCounter.hpp"
 
 
 // TODO: check if these should be hardware dependent
@@ -41,6 +42,10 @@ public:
         delete base_;
     } // GPUCounter
 
+    void initRadCounter(RadCounter<N>* rad) {
+        this->radCounter = rad;
+    }
+
     int n() const { return base_->n_; }
 
     int m() const { return base_->m_; }
@@ -53,6 +58,14 @@ public:
     //        SABNAtk assumes that apply() is const, to allow CUDA concurrency, we are changing that
     template <typename score_functor>
     void apply(const std::vector<int>& xa_vect, const std::vector<int>& pa_vect, std::vector<score_functor>& F) {
+
+        int threadNum = omp_get_thread_num();
+        // int cpu_num = sched_getcpu();
+        // printf("thread = %d running on %d\n", threadNum, cpu_num);
+        if (threadNum >= 4) {
+            return radCounter->apply(xa_vect, pa_vect, F);
+        }
+
         std::vector<int> xi(1 + pa_vect.size());
         xi[0] = xa_vect[0];
 
@@ -78,7 +91,7 @@ public:
 
         int maxConfigCount = aritiesPrefixProd[aritiesPrefixProd.size() - 1] * arities[arities.size() - 1];
         // printf("query count = %d\n", queryCountPtr->load());
-        int streamId = omp_get_thread_num() % 32;
+        int streamId = threadNum % 4;
 
         copyAritiesToDevice(streamId, arities, aritiesPrefixProd, aritiesPrefixSum);
 
@@ -93,7 +106,6 @@ public:
                            resultListPa_,                  // results array for Nij
                            0,
                            streamId);
-        // printf("done with kernel sid = %d\n", streamId);
 
         for (int i = 0; i < maxConfigCount; ++i) {
             if (resultList_[(streamId * MAX_COUNTS_PER_QUERY) + i] > 0) {
@@ -101,7 +113,6 @@ public:
             }
         }
 
-        // *queryCountPtr += 1;
     } // apply
 
 private:
@@ -149,6 +160,8 @@ private:
     // and with respect to user provided hints
     int MAX_NUM_STREAMS_;
     std::vector<cudaStream_t> streams;
+
+    RadCounter<N>* radCounter;
 
     template <int M, typename Iter>
     friend GPUCounter<M> create_GPUCounter(int, int, Iter);
@@ -249,8 +262,8 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     }
 
     // expected size = (number of configurations in the query) * sizeof(uint64_t)
-    cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * p.MAX_NUM_STREAMS_);
-    cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * p.MAX_NUM_STREAMS_);
+    cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * 4);
+    cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * 4);
 
     p.streams.resize(p.MAX_NUM_STREAMS_);
     p.queryCountPtr = new std::atomic_int(0);
