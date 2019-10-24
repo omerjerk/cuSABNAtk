@@ -31,6 +31,8 @@
 // TODO: check if these should be hardware dependent
 static const int MAX_COUNTS_PER_QUERY = 1024;
 
+#define STREAM_COUNT 4
+static std::atomic_flag isStreamFree[STREAM_COUNT] = {ATOMIC_FLAG_INIT};
 
 template <int N> class GPUCounter {
 public:
@@ -59,12 +61,18 @@ public:
     template <typename score_functor>
     void apply(const std::vector<int>& xa_vect, const std::vector<int>& pa_vect, std::vector<score_functor>& F) {
 
-        int threadNum = omp_get_thread_num();
-        // int cpu_num = sched_getcpu();
-        // printf("thread = %d running on %d\n", threadNum, cpu_num);
-        if (threadNum >= 4) {
-            return radCounter->apply(xa_vect, pa_vect, F);
+        int streamId = -1;
+        for (int i = 0; i < STREAM_COUNT; ++i) {
+            if (!isStreamFree[i].test_and_set(std::memory_order_relaxed)) {
+                streamId = i;
+                break;
+            }
         }
+        if (streamId == -1) {
+            // printf("sending to CPU\n");
+            return this->radCounter->apply(xa_vect, pa_vect, F);
+        }
+        // printf("sending to GPU %d\n", streamId);
 
         std::vector<int> xi(1 + pa_vect.size());
         xi[0] = xa_vect[0];
@@ -90,8 +98,6 @@ public:
         } // for i
 
         int maxConfigCount = aritiesPrefixProd[aritiesPrefixProd.size() - 1] * arities[arities.size() - 1];
-        // printf("query count = %d\n", queryCountPtr->load());
-        int streamId = threadNum % 4;
 
         copyAritiesToDevice(streamId, arities, aritiesPrefixProd, aritiesPrefixSum);
 
@@ -112,6 +118,8 @@ public:
                 F[0](resultList_[(streamId * MAX_COUNTS_PER_QUERY) + i], resultListPa_[(streamId * MAX_COUNTS_PER_QUERY) + i]);
             }
         }
+
+        isStreamFree[streamId].clear();
 
     } // apply
 
@@ -153,8 +161,6 @@ private:
     // results of each configuration of the given query
     uint64_t* resultList_;
     uint64_t* resultListPa_;
-
-    std::atomic_int* queryCountPtr;
 
     // MAX_NUM_STREAMS should be runtime parameter decided on data
     // and with respect to user provided hints
@@ -250,25 +256,13 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     cudaMemcpy(bvPtr, tempBvPtr, sizeof(uint64_t) * bitvectorWordCount, cudaMemcpyHostToDevice);
     delete[] tempBvPtr;
 
-    cudaDeviceProp prop;
-    cudaGetDeviceProperties(&prop, 0); //assuming that there is just one device
-    //The max number of concurrent kernels on compute capability 7.0+ is 128.
-    //However, limiting it to 64 because I am a bit skeptical that we may actually end up losing
-    //performance with 128 streams
-    if (prop.concurrentKernels > 64) {
-        p.MAX_NUM_STREAMS_ = 64;
-    } else {
-        p.MAX_NUM_STREAMS_ = prop.concurrentKernels;
-    }
-
     // expected size = (number of configurations in the query) * sizeof(uint64_t)
-    cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * 4);
-    cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * 4);
+    cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT);
+    cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT);
 
-    p.streams.resize(p.MAX_NUM_STREAMS_);
-    p.queryCountPtr = new std::atomic_int(0);
+    p.streams.resize(STREAM_COUNT);
 
-    for (int i = 0; i < p.MAX_NUM_STREAMS_; ++i) {
+    for (int i = 0; i < STREAM_COUNT; ++i) {
         cudaStreamCreate(&p.streams[i]);
     }
 
