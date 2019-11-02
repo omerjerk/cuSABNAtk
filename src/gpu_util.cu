@@ -89,6 +89,7 @@ __global__ void counts(const T* inputData,
 
     T totSum = 0;
     T paSum = 0;
+    T xiBitVect;
 
     int temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][0]) % aritiesPtr_[streamId][0]);
     T paBitVect = *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][0] + temp) * words_per_vector) + word_index);
@@ -99,11 +100,13 @@ __global__ void counts(const T* inputData,
         paBitVect = paBitVect & *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][p] + temp) * words_per_vector) + word_index);
     }
 
-    temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][variablesCount-1]) % aritiesPtr_[streamId][variablesCount-1]);
-    T xiBitVect = *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][variablesCount-1] + temp) * words_per_vector) + word_index);
+    if (isSecondStage) {
+        temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][variablesCount-1]) % aritiesPtr_[streamId][variablesCount-1]);
+        xiBitVect = *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][variablesCount-1] + temp) * words_per_vector) + word_index);
+        xiBitVect &= paBitVect;
+        totSum += __popcll(xiBitVect);
+    }
 
-    xiBitVect &= paBitVect;
-    totSum += __popcll(xiBitVect);
     paSum += __popcll(paBitVect);
 
     // ensure we don't read out of bounds -- this is optimized away for power of 2 sized arrays
@@ -118,107 +121,138 @@ __global__ void counts(const T* inputData,
             paBitVect = paBitVect & *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][p] + temp) * words_per_vector) + word_index_upper_half);
         }
 
-        temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][variablesCount-1]) % aritiesPtr_[streamId][variablesCount-1]);
-        xiBitVect = *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][variablesCount-1] + temp) * words_per_vector) + word_index_upper_half);
+        if (isSecondStage) {
+            temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][variablesCount-1]) % aritiesPtr_[streamId][variablesCount-1]);
+            xiBitVect = *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][variablesCount-1] + temp) * words_per_vector) + word_index_upper_half);
+            xiBitVect &= paBitVect;
+            totSum += __popcll(xiBitVect);
+        }
 
-        xiBitVect &= paBitVect;
-        totSum += __popcll(xiBitVect);
         paSum += __popcll(paBitVect);
     }
 
     // each thread puts its local sum into shared memory
-    sDataTot[tid] = totSum;
+    if (isSecondStage) {
+        sDataTot[tid] = totSum;
+    }
     sDataPa[tid] = paSum;
 
     __syncthreads();
 
     // do reduction in shared mem
     if ((blockSize >= 512) && (tid < 256)) {
-      sDataTot[tid] = totSum = totSum + sDataTot[tid + 256];
-      sDataPa[tid] = paSum = paSum + sDataPa[tid + 256];
+        if (isSecondStage) {
+            sDataTot[tid] = totSum = totSum + sDataTot[tid + 256];
+        }
+        sDataPa[tid] = paSum = paSum + sDataPa[tid + 256];
     }
 
     __syncthreads();
 
     if ((blockSize >= 256) && (tid < 128)) {
-      sDataTot[tid] = totSum = totSum + sDataTot[tid + 128];
-      sDataPa[tid] = paSum = paSum + sDataPa[tid + 128];
+        if (isSecondStage) {
+            sDataTot[tid] = totSum = totSum + sDataTot[tid + 128];
+        }
+        sDataPa[tid] = paSum = paSum + sDataPa[tid + 128];
     }
 
-   __syncthreads();
+    __syncthreads();
 
     if ((blockSize >= 128) && (tid <  64)) {
-      sDataTot[tid] = totSum = totSum + sDataTot[tid +  64];
-      sDataPa[tid] = paSum = paSum + sDataPa[tid + 64];
+        if (isSecondStage) {
+            sDataTot[tid] = totSum = totSum + sDataTot[tid +  64];
+        }
+        sDataPa[tid] = paSum = paSum + sDataPa[tid + 64];
     }
 
-  __syncthreads();
+    __syncthreads();
 
-  #if (__CUDA_ARCH__ >= 300 )
-  if ( tid < 32 ) {
-      // Fetch final intermediate sum from 2nd warp
-      if (blockSize >=  64) {
-        totSum += sDataTot[tid + 32];
-        paSum += sDataPa[tid + 32];
-      }
-      // Reduce final warp using shuffle
-      for (int offset = warpSize / 2; offset > 0; offset /= 2) {
-        totSum += __shfl_down_sync(0xFFFFFFFF, totSum, offset);
-        paSum += __shfl_down_sync(0xFFFFFFFF, paSum, offset);
-      }
-  }
-  #else
-  // fully unroll reduction within a single warp
-  if ((blockSize >= 64) && (tid < 32)) {
-    sDataTot[tid] = totSum = totSum + sDataTot[tid + 32];
-    sDataPa[tid] = paSum = paSum + sDataPa[tid + 32];
-  }
+    #if (__CUDA_ARCH__ >= 300 )
+    if ( tid < 32 ) {
+        // Fetch final intermediate sum from 2nd warp
+        if (blockSize >=  64) {
+            if (isSecondStage) {
+                totSum += sDataTot[tid + 32];
+            }
+            paSum += sDataPa[tid + 32];
+        }
+        // Reduce final warp using shuffle
+        for (int offset = warpSize / 2; offset > 0; offset /= 2) {
+            if (isSecondStage) {
+                totSum += __shfl_down_sync(0xFFFFFFFF, totSum, offset);
+            }
+            paSum += __shfl_down_sync(0xFFFFFFFF, paSum, offset);
+        }
+    }
+    #else
+    // fully unroll reduction within a single warp
+    if ((blockSize >= 64) && (tid < 32)) {
+        if (isSecondStage) {
+            sDataTot[tid] = totSum = totSum + sDataTot[tid + 32];
+        }
+        sDataPa[tid] = paSum = paSum + sDataPa[tid + 32];
+    }
 
-  __syncthreads();
+    __syncthreads();
 
-  if ((blockSize >= 32) && (tid < 16)) {
-    sDataTot[tid] = totSum = totSum + sDataTot[tid + 16];
-    sDataPa[tid] = paSum = paSum + sDataPa[tid + 16];
-  }
+    if ((blockSize >= 32) && (tid < 16)) {
+        if (isSecondStage) {
+            sDataTot[tid] = totSum = totSum + sDataTot[tid + 16];
+        }
+        sDataPa[tid] = paSum = paSum + sDataPa[tid + 16];
+    }
 
-  __syncthreads();
+    __syncthreads();
 
-  if ((blockSize >= 16) && (tid <  8)) {
-    sDataTot[tid] = totSum = totSum + sDataTot[tid +  8];
-    sDataPa[tid] = paSum = paSum + sDataPa[tid + 8];
-  }
+    if ((blockSize >= 16) && (tid <  8)) {
+        if (isSecondStage) {
+            sDataTot[tid] = totSum = totSum + sDataTot[tid +  8];
+        }
+        sDataPa[tid] = paSum = paSum + sDataPa[tid + 8];
+    }
 
-  __syncthreads();
+    __syncthreads();
 
-  if ((blockSize >= 8) && (tid <  4)) {
-    sDataTot[tid] = totSum = totSum + sDataTot[tid +  4];
-    sDataPa[tid] = paSum = paSum + sDataPa[tid + 4];
-  }
+    if ((blockSize >= 8) && (tid <  4)) {
+        if (isSecondStage) {
+            sDataTot[tid] = totSum = totSum + sDataTot[tid +  4];
+        }
+        sDataPa[tid] = paSum = paSum + sDataPa[tid + 4];
+    }
 
-  __syncthreads();
+    __syncthreads();
 
-  if ((blockSize >= 4) && (tid <  2)) {
-    sDataTot[tid] = totSum = totSum + sDataTot[tid +  2];
-    sDataPa[tid] = paSum = paSum + sDataPa[tid + 2];
-  }
+    if ((blockSize >= 4) && (tid <  2)) {
+        if (isSecondStage) {
+            sDataTot[tid] = totSum = totSum + sDataTot[tid +  2];
+        }
+        sDataPa[tid] = paSum = paSum + sDataPa[tid + 2];
+    }
 
-  __syncthreads();
+    __syncthreads();
 
-  if ((blockSize >= 2) && ( tid <  1)) {
-    sDataTot[tid] = totSum = totSum + sDataTot[tid +  1];
-    sDataPa[tid] = paSum = paSum + sDataPa[tid + 1];
-  }
+    if ((blockSize >= 2) && ( tid <  1)) {
+        if (isSecondStage) {
+            sDataTot[tid] = totSum = totSum + sDataTot[tid +  1];
+        }
+        sDataPa[tid] = paSum = paSum + sDataPa[tid + 1];
+    }
 
-  __syncthreads();
+    __syncthreads();
 #endif
 
-  // write result for this block to global mem
-  if (tid == 0) {
-    outputData[(streamId*1024) + blockIdx.x] = totSum;
-    outputDataPa[(streamId*1024) + blockIdx.x] = paSum;
-  }
+    // write result for this block to global mem
+    if (tid == 0) {
+        if (!isSecondStage) {
+            //TODO: use global constant here or something else?
+            outputData[(streamId*1024) + blockIdx.x] = totSum;
+            outputDataPa[(streamId*1024) + blockIdx.x] = paSum;
+        } else if (paSum) {
+            //TODO: call child kernel recursively from here
+        }
+    }
 
-  __syncthreads();
+    __syncthreads();
 } // counts
 
 

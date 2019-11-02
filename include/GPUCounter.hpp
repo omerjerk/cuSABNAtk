@@ -27,8 +27,6 @@
 #include "gpu_util.cuh"
 #include "RadCounter.hpp"
 
-
-// TODO: check if these should be hardware dependent
 static const int MAX_COUNTS_PER_QUERY = 1024;
 static const int MAX_VARS_FIRST_STAGE = 5;
 static const int MAX_COUNTS_FIRST_STAGE = 1 << 5; //considering all variables have arity of 2
@@ -86,6 +84,7 @@ public:
         for (int i = 0; i < paSize; i++) {
             xi[i] = pa_vect[i];
             arities.push_back(r(xi[i]));
+            //TODO: remove this branch
             if (i == 0) {
                 aritiesPrefixProd.push_back(1);
             } else {
