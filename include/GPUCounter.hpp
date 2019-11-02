@@ -31,7 +31,7 @@
 // TODO: check if these should be hardware dependent
 static const int MAX_COUNTS_PER_QUERY = 1024;
 
-#define STREAM_COUNT 4
+#define STREAM_COUNT 2
 static std::atomic_flag isStreamFree[STREAM_COUNT] = {ATOMIC_FLAG_INIT};
 
 template <int N> class GPUCounter {
@@ -162,9 +162,6 @@ private:
     uint64_t* resultList_;
     uint64_t* resultListPa_;
 
-    // MAX_NUM_STREAMS should be runtime parameter decided on data
-    // and with respect to user provided hints
-    int MAX_NUM_STREAMS_;
     std::vector<cudaStream_t> streams;
 
     RadCounter<N>* radCounter;

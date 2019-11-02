@@ -72,10 +72,10 @@ __host__ void copyAritiesToDevice(int streamId,
 
 
 template <class T, unsigned int blockSize, bool nIsPow2>
-__global__ void counts(const T* g_idata,
-                       T* g_odata,
-                       T* g_odataPa,
-                       T* g_rdata,
+__global__ void counts(const T* inputData,
+                       T* outputData,
+                       T* outputDataPa,
+                       T* intermediateData,
                        unsigned int words_per_vector, // m / 64
                        int vectors_per_config, // number of variables in a query
                        int configs_per_query, /* number of configs*/
@@ -90,20 +90,17 @@ __global__ void counts(const T* g_idata,
     T totSum = 0;
     T paSum = 0;
     int temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][0]) % aritiesPtr_[streamId][0]);
-    T xiBitVect = *(((uint64_t*)g_idata) + ((aritiesPrefixSumPtr_[streamId][0] + temp) * words_per_vector) + word_index);
+    T xiBitVect = *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][0] + temp) * words_per_vector) + word_index);
 
     temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][1]) % aritiesPtr_[streamId][1]);
-    T paBitVect = *(((uint64_t*)g_idata) + ((aritiesPrefixSumPtr_[streamId][1] + temp) * words_per_vector) + word_index);
+    T paBitVect = *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][1] + temp) * words_per_vector) + word_index);
 
     // running sum for all word slices
     for (int p = 2; p < vectors_per_config; ++p) {
         temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][p]) % aritiesPtr_[streamId][p]);
-        paBitVect = paBitVect & *(((uint64_t*)g_idata) + ((aritiesPrefixSumPtr_[streamId][p] + temp) * words_per_vector) + word_index);
+        paBitVect = paBitVect & *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][p] + temp) * words_per_vector) + word_index);
     }
 
-    // if (g_rdata != 0) { // todo can be compile time decision
-        // g_rdata[result_index] = localState;
-    // }
     xiBitVect &= paBitVect;
     totSum += __popcll(xiBitVect);
     paSum += __popcll(paBitVect);
@@ -112,19 +109,15 @@ __global__ void counts(const T* g_idata,
     if (nIsPow2 || (tid + blockSize < words_per_vector)) {
         unsigned int word_index_upper_half = word_index + blockSize;
         temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][0]) % aritiesPtr_[streamId][0]);
-        xiBitVect = *(((uint64_t*)g_idata) + ((aritiesPrefixSumPtr_[streamId][0] + temp) * words_per_vector) + word_index_upper_half);
+        xiBitVect = *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][0] + temp) * words_per_vector) + word_index_upper_half);
 
         temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][1]) % aritiesPtr_[streamId][1]);
-        paBitVect = *(((uint64_t*)g_idata) + ((aritiesPrefixSumPtr_[streamId][1] + temp) * words_per_vector) + word_index_upper_half);
+        paBitVect = *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][1] + temp) * words_per_vector) + word_index_upper_half);
 
         for (int p = 2; p < vectors_per_config; p++) {
             temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][p]) % aritiesPtr_[streamId][p]);
-            paBitVect = paBitVect & *(((uint64_t*)g_idata) + ((aritiesPrefixSumPtr_[streamId][p] + temp) * words_per_vector) + word_index_upper_half);
+            paBitVect = paBitVect & *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][p] + temp) * words_per_vector) + word_index_upper_half);
         }
-
-        // if (g_rdata != 0) { // todo can be compile time decision
-            // g_rdata[result_index + blockSize] = localState;
-        // }
 
         xiBitVect &= paBitVect;
         totSum += __popcll(xiBitVect);
@@ -219,8 +212,8 @@ __global__ void counts(const T* g_idata,
 
   // write result for this block to global mem
   if (tid == 0) {
-    g_odata[(streamId*1024) + blockIdx.x] = totSum;
-    g_odataPa[(streamId*1024) + blockIdx.x] = paSum;
+    outputData[(streamId*1024) + blockIdx.x] = totSum;
+    outputDataPa[(streamId*1024) + blockIdx.x] = paSum;
   }
 
   __syncthreads();
