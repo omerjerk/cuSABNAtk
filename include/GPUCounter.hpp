@@ -30,6 +30,8 @@
 
 // TODO: check if these should be hardware dependent
 static const int MAX_COUNTS_PER_QUERY = 1024;
+static const int MAX_VARS_FIRST_STAGE = 5;
+static const int MAX_COUNTS_FIRST_STAGE = 1 << 5; //considering all variables have arity of 2
 
 #define STREAM_COUNT 2
 static std::atomic_flag isStreamFree[STREAM_COUNT] = {ATOMIC_FLAG_INIT};
@@ -73,31 +75,31 @@ public:
             return this->radCounter->apply(xa_vect, pa_vect, F);
         }
         // printf("sending to GPU %d\n", streamId);
-
-        std::vector<int> xi(1 + pa_vect.size());
-        xi[0] = xa_vect[0];
+        int paSize = pa_vect.size();
+        std::vector<int> xi(1 + paSize);
 
         std::vector<uint64_t> arities;
         std::vector<uint64_t> aritiesPrefixProd;
         std::vector<uint64_t> aritiesPrefixSum;
 
         // build arities list
-        arities.push_back(r(xi[0]));
-        aritiesPrefixProd.push_back(1);
-        aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[0]]);
-
-        int arity = 0;
-
-        for (int i = 0; i < pa_vect.size(); i++) {
-            xi[i + 1] = pa_vect[i];
-            arity = r(xi[i + 1]);
-
-            arities.push_back(arity);
-            aritiesPrefixProd.push_back(aritiesPrefixProd[i] * arities[i]);
-            aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[i + 1]]);
+        for (int i = 0; i < paSize; i++) {
+            xi[i] = pa_vect[i];
+            arities.push_back(r(xi[i]));
+            if (i == 0) {
+                aritiesPrefixProd.push_back(1);
+            } else {
+                aritiesPrefixProd.push_back(aritiesPrefixProd[i-1] * arities[i-1]);
+            }
+            aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[i]]);
         } // for i
+        xi[paSize] = xa_vect[0];
+        arities.push_back(r(xi[paSize]));
+        aritiesPrefixProd.push_back(aritiesPrefixProd[paSize-1] * arities[paSize-1]);
+        aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[paSize]]);
 
-        int maxConfigCount = aritiesPrefixProd[aritiesPrefixProd.size() - 1] * arities[arities.size() - 1];
+        int maxConfigCount = aritiesPrefixProd[paSize] * arities[paSize];
+        std::cout<<"max config count = "<<maxConfigCount<<std::endl;
 
         copyAritiesToDevice(streamId, arities, aritiesPrefixProd, aritiesPrefixSum);
 
@@ -161,6 +163,7 @@ private:
     // results of each configuration of the given query
     uint64_t* resultList_;
     uint64_t* resultListPa_;
+    uint64_t* intermediaResult_;
 
     std::vector<cudaStream_t> streams;
 
@@ -256,6 +259,7 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     // expected size = (number of configurations in the query) * sizeof(uint64_t)
     cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT);
     cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT);
+    cudaMalloc(&p.intermediaResult_, sizeof(uint64_t) * MAX_VARS_FIRST_STAGE * STREAM_COUNT);
 
     p.streams.resize(STREAM_COUNT);
 
