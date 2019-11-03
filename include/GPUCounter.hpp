@@ -84,8 +84,7 @@ public:
         for (int i = 0; i < paSize; i++) {
             xi[i] = pa_vect[i];
             arities.push_back(r(xi[i]));
-            //TODO: remove this branch
-            if (i == 0) {
+            if (i%MAX_COUNTS_FIRST_STAGE == 0) {
                 aritiesPrefixProd.push_back(1);
             } else {
                 aritiesPrefixProd.push_back(aritiesPrefixProd[i-1] * arities[i-1]);
@@ -96,8 +95,10 @@ public:
         arities.push_back(r(xi[paSize]));
         aritiesPrefixProd.push_back(aritiesPrefixProd[paSize-1] * arities[paSize-1]);
         aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[paSize]]);
+        aritiesPrefixProd.push_back(aritiesPrefixProd[paSize] * arities[paSize]);
 
-        int maxConfigCount = aritiesPrefixProd[paSize] * arities[paSize];
+        int maxConfigCount = (paSize + 1) > MAX_COUNTS_PER_QUERY ? aritiesPrefixProd[MAX_COUNTS_PER_QUERY-1] * arities[MAX_COUNTS_PER_QUERY-1]
+                                     : aritiesPrefixProd[paSize+1];
         std::cout<<"max config count = "<<maxConfigCount<<std::endl;
 
         copyAritiesToDevice(streamId, arities, aritiesPrefixProd, aritiesPrefixSum);
@@ -111,7 +112,7 @@ public:
                            base_->nodeList_[0].bitvectors, // starting address of our data
                            resultList_,                    // results array for Nijk
                            resultListPa_,                  // results array for Nij
-                           0,
+                           intermediaResult_,              // memory for intermediate results
                            streamId);
 
         for (int i = 0; i < maxConfigCount; ++i) {
@@ -258,7 +259,8 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     // expected size = (number of configurations in the query) * sizeof(uint64_t)
     cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT);
     cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT);
-    cudaMalloc(&p.intermediaResult_, sizeof(uint64_t) * MAX_VARS_FIRST_STAGE * STREAM_COUNT);
+
+    cudaMalloc(&p.intermediaResult_, sizeof(uint64_t) * bitvectorWordCount * (1 << MAX_VARS_FIRST_STAGE) * STREAM_COUNT);
 
     p.streams.resize(STREAM_COUNT);
 

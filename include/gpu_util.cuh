@@ -12,9 +12,9 @@
 #define CUDA_CALLABLE
 #endif
 
-__constant__ uint64_t aritiesPtr_[64][10];
-__constant__ uint64_t aritiesPrefixProdPtr_[64][10];
-__constant__ uint64_t aritiesPrefixSumPtr_[64][10];
+__constant__ uint64_t aritiesPtr_[4][10];
+__constant__ uint64_t aritiesPrefixProdPtr_[4][11];
+__constant__ uint64_t aritiesPrefixSumPtr_[4][10];
 
 void copyAritiesToDevice(
                         int streamId,
@@ -25,12 +25,12 @@ void copyAritiesToDevice(
 void cudaCallBlockCount(const uint block_count,
                         const uint per_block_thread_count,
                         const uint words_per_vector,
-                        const uint vectors_per_config,
+                        const uint variablesCount,
                         const uint configs_per_query,
                         const uint64_t* bvectorsPtr,
                         uint64_t* results,
                         uint64_t *resultsPa,
-                        uint64_t* intermediateStatesPtr,
+                        uint64_t* intermediateData,
                         int streamId);
 
 #endif // GPU_UTIL
