@@ -1,3 +1,5 @@
+#pragma once
+
 #ifndef GPU_UTIL
 #define GPU_UTIL
 
@@ -11,10 +13,6 @@
 #else
 #define CUDA_CALLABLE
 #endif
-
-__constant__ uint64_t aritiesPtr_[4][10];
-__constant__ uint64_t aritiesPrefixProdPtr_[4][11];
-__constant__ uint64_t aritiesPrefixSumPtr_[4][10];
 
 void copyAritiesToDevice(
                         int streamId,

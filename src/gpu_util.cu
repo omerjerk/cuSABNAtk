@@ -43,12 +43,24 @@
 
 #include "gpu_util.cuh"
 
-//
-// Reduction based on cuda-8.0/samples/6_Advanced/reduction
-//
+__constant__ uint64_t aritiesPtr_[4][10];
+__constant__ uint64_t aritiesPrefixProdPtr_[4][11];
+__constant__ uint64_t aritiesPrefixSumPtr_[4][10];
+
+template <class T, unsigned int blockSize, bool nIsPow2, bool isSecondStage>
+__global__ void counts(const T* inputData,
+                       T* outputData,
+                       T* outputDataPa,
+                       T* intermediateData,
+                       unsigned int words_per_vector, // m / 64
+                       int variablesCount, // number of variables in a query
+                       int configs_per_query, /* number of configs*/
+                       int startVariableId,
+                       int streamId,
+                       int parentBlockId);
 
 // from cuda samples reduction
-__global__ inline unsigned int nextPow2(unsigned int x) {
+CUDA_CALLABLE unsigned int nextPow2(unsigned int x) {
     --x;
     x |= x >> 1;
     x |= x >> 2;
@@ -58,17 +70,18 @@ __global__ inline unsigned int nextPow2(unsigned int x) {
     return ++x;
 } // nextPow2
 
-__global__ inline void startKernel(const T* inputData,
-    T* outputData,
-    T* outputDataPa,
-    T* intermediateData,
+template <bool isSecondStage>
+CUDA_CALLABLE void startKernel(const uint64_t* inputData,
+    uint64_t* outputData,
+    uint64_t* outputDataPa,
+    uint64_t* intermediateData,
     unsigned int words_per_vector, // m / 64
     int variablesCount, // number of variables in a query
     int configs_per_query, /* number of configs*/
     int startVariableId,
     int streamId,
     int threadCount,
-    bool isSecondStage) {
+    int parentBlockId) {
 
     dim3 dimBlock(threadCount, 1, 1);
     dim3 dimGrid(configs_per_query, 1, 1);
@@ -140,65 +153,65 @@ __global__ inline void startKernel(const T* inputData,
         break;
         }
     } else { */
-        switch (threads) {
+        switch (threadCount) {
             case 512:
         counts<uint64_t, 512, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
-            bvectorsPtr, results, resultsPa,
-            states, words_per_vector, vectors_per_config, configs_per_query, 0, streamId);
+            inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
+            configs_per_query, 0, streamId, parentBlockId);
         break;
     
         case 256:
         counts<uint64_t, 256, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
-            bvectorsPtr, results, resultsPa,
-            states, words_per_vector, vectors_per_config, configs_per_query, 0, streamId);
+            inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
+            configs_per_query, 0, streamId, parentBlockId);
         break;
     
         case 128:
         counts<uint64_t, 128, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
-            bvectorsPtr, results, resultsPa,
-            states, words_per_vector, vectors_per_config, configs_per_query, 0, streamId);
+            inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
+            configs_per_query, 0, streamId, parentBlockId);
         break;
     
         case 64:
         counts<uint64_t, 64, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
-            bvectorsPtr, results, resultsPa,
-            states, words_per_vector, vectors_per_config, configs_per_query, 0, streamId);
+            inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
+            configs_per_query, 0, streamId, parentBlockId);
         break;
     
         case 32:
         counts<uint64_t, 32, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
-            bvectorsPtr, results, resultsPa,
-            states, words_per_vector, vectors_per_config, configs_per_query, 0, streamId);
+            inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
+            configs_per_query, 0, streamId, parentBlockId);
         break;
     
         case 16:
         counts<uint64_t, 16, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
-            bvectorsPtr, results, resultsPa,
-            states, words_per_vector, vectors_per_config, configs_per_query, 0, streamId);
+            inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
+            configs_per_query, 0, streamId, parentBlockId);
         break;
     
         case 8:
         counts<uint64_t, 8, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
-            bvectorsPtr, results, resultsPa,
-            states, words_per_vector, vectors_per_config, configs_per_query, 0, streamId);
+            inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
+            configs_per_query, 0, streamId, parentBlockId);
         break;
     
         case 4:
         counts<uint64_t, 4, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
-            bvectorsPtr, results, resultsPa,
-            states, words_per_vector, vectors_per_config, configs_per_query, 0, streamId);
+            inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
+            configs_per_query, 0, streamId, parentBlockId);
         break;
     
         case 2:
         counts<uint64_t, 2, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
-            bvectorsPtr, results, resultsPa,
-            states, words_per_vector, vectors_per_config, configs_per_query, 0, streamId);
+            inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
+            configs_per_query, 0, streamId, parentBlockId);
         break;
     
         case 1:
         counts<uint64_t, 1, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
-            bvectorsPtr, results, resultsPa,
-            states, words_per_vector, vectors_per_config, configs_per_query, 0, streamId);
+            inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
+            configs_per_query, 0, streamId, parentBlockId);
         break;
         }
     // }
@@ -237,7 +250,8 @@ __global__ void counts(const T* inputData,
                        int variablesCount, // number of variables in a query
                        int configs_per_query, /* number of configs*/
                        int startVariableId,
-                       int streamId) {
+                       int streamId,
+                       int parentBlockId) {
     T* sDataPa = SharedMemory<T>();
     T* sDataTot = &sDataPa[blockSize];
 
@@ -249,11 +263,11 @@ __global__ void counts(const T* inputData,
     T paSum = 0;
     T xiBitVect;
 
-    int temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][0]) % aritiesPtr_[streamId][0]);
-    T paBitVect = *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][0] + temp) * words_per_vector) + word_index);
+    int temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][startVariableId]) % aritiesPtr_[streamId][startVariableId]);
+    T paBitVect = *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][startVariableId] + temp) * words_per_vector) + word_index);
 
     // running sum for all word slices
-    for (int p = 1; p < variablesCount-1; ++p) {
+    for (int p = startVariableId + 1; p < min(5 + startVariableId, variablesCount-1); ++p) {
         temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][p]) % aritiesPtr_[streamId][p]);
         paBitVect = paBitVect & *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][p] + temp) * words_per_vector) + word_index);
     }
@@ -271,10 +285,10 @@ __global__ void counts(const T* inputData,
     if (nIsPow2 || (tid + blockSize < words_per_vector)) {
         unsigned int word_index_upper_half = word_index + blockSize;
 
-        temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][0]) % aritiesPtr_[streamId][0]);
-        paBitVect = *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][0] + temp) * words_per_vector) + word_index_upper_half);
+        temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][startVariableId]) % aritiesPtr_[streamId][startVariableId]);
+        paBitVect = *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][startVariableId] + temp) * words_per_vector) + word_index_upper_half);
 
-        for (int p = 1; p < variablesCount-1; p++) {
+        for (int p = startVariableId + 1; p < min(5 + startVariableId, variablesCount-1); p++) {
             temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][p]) % aritiesPtr_[streamId][p]);
             paBitVect = paBitVect & *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][p] + temp) * words_per_vector) + word_index_upper_half);
         }
@@ -402,23 +416,23 @@ __global__ void counts(const T* inputData,
     // write result for this block to global mem
     if (tid == 0) {
         //TODO: bypass this logic if number of variables is already small
-        if (!isSecondStage) {
+        if (isSecondStage) {
             //TODO: use global constant here or something else?
-            outputData[(streamId*1024) + blockIdx.x] = totSum;
-            outputDataPa[(streamId*1024) + blockIdx.x] = paSum;
+            outputData[(streamId*1024) + (parentBlockId * 32) + blockIdx.x] = totSum;
+            outputDataPa[(streamId*1024) + (parentBlockId * 32) + blockIdx.x] = paSum;
         } else if (paSum) {
             int threadCount = nextPow2((words_per_vector + 1) >> 1);
-            startKernel(inputData,
+            startKernel<true>(inputData,
                 outputData,
                 outputDataPa,
                 intermediateData,
                 words_per_vector,
                 variablesCount, // number of variables in a query
-                aritiesPrefixProdPtr_[variablesCount] / configs_per_query, /* number of configs*/
+                aritiesPrefixProdPtr_[streamId][variablesCount] / configs_per_query, /* number of configs*/
                 5, //TODO: make it safer
                 streamId,
                 threadCount,
-                false);
+                blockIdx.x);
         }
     }
 
@@ -440,8 +454,8 @@ void cudaCallBlockCount(const uint block_count,
 
   int threadCount = nextPow2((words_per_vector + 1) >> 1);
 
-  startKernel(bvectorsPtr, results, resultsPa, intermediateData, words_per_vector,
-                vectors_per_config, configs_per_query, 0, streamId, threadCount);
+  startKernel<false>(bvectorsPtr, results, resultsPa, intermediateData, words_per_vector,
+                        variablesCount, configs_per_query, 0, streamId, threadCount, -1);
 
   cudaStreamSynchronize(0);
 
