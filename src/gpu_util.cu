@@ -40,12 +40,23 @@
 
 #include <cstdint>
 #include <stdio.h>
+#include <assert.h>
 
 #include "gpu_util.cuh"
 
 __constant__ uint64_t aritiesPtr_[4][10];
 __constant__ uint64_t aritiesPrefixProdPtr_[4][11];
 __constant__ uint64_t aritiesPrefixSumPtr_[4][10];
+
+#define cucheck_dev(call)                                   \
+{                                                           \
+  cudaError_t cucheck_err = (call);                         \
+  if(cucheck_err != cudaSuccess) {                          \
+    const char *err_str = cudaGetErrorString(cucheck_err);  \
+    printf("%s (%d): %s\n", __FILE__, __LINE__, err_str);   \
+    assert(0);                                              \
+  }                                                         \
+}
 
 template <class T, unsigned int blockSize, bool nIsPow2, bool isSecondStage>
 __global__ void counts(const T* inputData,
@@ -213,8 +224,12 @@ CUDA_CALLABLE void startKernel(const uint64_t* inputData,
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
             configs_per_query, 0, streamId, parentBlockId);
         break;
+        default:
+        printf("Unsupported thread count. Exiting.\n");
         }
     // }
+
+    cucheck_dev(cudaGetLastError());
 }
 
 // Utility class used to avoid linker errors with extern
@@ -252,6 +267,7 @@ __global__ void counts(const T* inputData,
                        int startVariableId,
                        int streamId,
                        int parentBlockId) {
+    printf("kernel launched\n");
     T* sDataPa = SharedMemory<T>();
     T* sDataTot = &sDataPa[blockSize];
 
@@ -415,12 +431,14 @@ __global__ void counts(const T* inputData,
 
     // write result for this block to global mem
     if (tid == 0) {
+        printf("thread id = 0\n");
         //TODO: bypass this logic if number of variables is already small
         if (isSecondStage) {
             //TODO: use global constant here or something else?
             outputData[(streamId*1024) + (parentBlockId * 32) + blockIdx.x] = totSum;
             outputDataPa[(streamId*1024) + (parentBlockId * 32) + blockIdx.x] = paSum;
         } else if (paSum) {
+            printf("starting child kernel for blockid %d\n", blockIdx.x);
             int threadCount = nextPow2((words_per_vector + 1) >> 1);
             startKernel<true>(inputData,
                 outputData,
@@ -433,6 +451,8 @@ __global__ void counts(const T* inputData,
                 streamId,
                 threadCount,
                 blockIdx.x);
+        } else {
+            printf("paSum = 0 for blockidx = %d\n", blockIdx);
         }
     }
 

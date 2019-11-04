@@ -97,7 +97,7 @@ public:
         aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[paSize]]);
         aritiesPrefixProd.push_back(aritiesPrefixProd[paSize] * arities[paSize]);
 
-        int maxConfigCount = (paSize + 1) > MAX_COUNTS_PER_QUERY ? aritiesPrefixProd[MAX_COUNTS_PER_QUERY-1] * arities[MAX_COUNTS_PER_QUERY-1]
+        int maxConfigCount = (paSize + 1) > MAX_VARS_FIRST_STAGE ? aritiesPrefixProd[MAX_VARS_FIRST_STAGE-1] * arities[MAX_VARS_FIRST_STAGE-1]
                                      : aritiesPrefixProd[paSize+1];
         std::cout<<"max config count = "<<maxConfigCount<<std::endl;
 
@@ -115,7 +115,8 @@ public:
                            intermediaResult_,              // memory for intermediate results
                            streamId);
 
-        for (int i = 0; i < maxConfigCount; ++i) {
+        //TODO: fix this condition
+        for (int i = 0; i < maxConfigCount * 32; ++i) {
             if (resultList_[(streamId * MAX_COUNTS_PER_QUERY) + i] > 0) {
                 F[0](resultList_[(streamId * MAX_COUNTS_PER_QUERY) + i], resultListPa_[(streamId * MAX_COUNTS_PER_QUERY) + i]);
             }
