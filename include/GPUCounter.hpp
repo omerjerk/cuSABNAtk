@@ -31,7 +31,7 @@ static const int MAX_COUNTS_PER_QUERY = 1024;
 static const int MAX_VARS_FIRST_STAGE = 5;
 static const int MAX_COUNTS_FIRST_STAGE = 1 << 5; //considering all variables have arity of 2
 
-#define STREAM_COUNT 2
+#define STREAM_COUNT 1
 static std::atomic_flag isStreamFree[STREAM_COUNT] = {ATOMIC_FLAG_INIT};
 
 template <int N> class GPUCounter {
@@ -84,7 +84,7 @@ public:
         for (int i = 0; i < paSize; i++) {
             xi[i] = pa_vect[i];
             arities.push_back(r(xi[i]));
-            if (i%MAX_COUNTS_FIRST_STAGE == 0) {
+            if (i%MAX_VARS_FIRST_STAGE == 0) {
                 aritiesPrefixProd.push_back(1);
             } else {
                 aritiesPrefixProd.push_back(aritiesPrefixProd[i-1] * arities[i-1]);
@@ -95,11 +95,11 @@ public:
         arities.push_back(r(xi[paSize]));
         aritiesPrefixProd.push_back(aritiesPrefixProd[paSize-1] * arities[paSize-1]);
         aritiesPrefixSum.push_back(aritiesPrefixSumGlobal_[xi[paSize]]);
-        aritiesPrefixProd.push_back(aritiesPrefixProd[paSize] * arities[paSize]);
+        // aritiesPrefixProd.push_back(aritiesPrefixProd[paSize] * arities[paSize]);
 
-        int maxConfigCount = (paSize + 1) > MAX_VARS_FIRST_STAGE ? aritiesPrefixProd[MAX_VARS_FIRST_STAGE-1] * arities[MAX_VARS_FIRST_STAGE-1]
-                                     : aritiesPrefixProd[paSize+1];
-        std::cout<<"max config count = "<<maxConfigCount<<std::endl;
+        // int maxConfigCount = (paSize + 1) > MAX_VARS_FIRST_STAGE ? aritiesPrefixProd[MAX_VARS_FIRST_STAGE-1] * arities[MAX_VARS_FIRST_STAGE-1]
+                                    //  : aritiesPrefixProd[paSize+1];
+        // std::cout<<"max config count = "<<maxConfigCount<<std::endl;
 
         copyAritiesToDevice(streamId, arities, aritiesPrefixProd, aritiesPrefixSum);
 
@@ -108,7 +108,7 @@ public:
                            1024,                           // device limit, not used
                            base_->bitvectorSize_,          // number of words in each bitvector
                            arities.size(),                 // number of variables in one config
-                           maxConfigCount,                 // number of configurations
+                           32,                 // number of configurations
                            base_->nodeList_[0].bitvectors, // starting address of our data
                            resultList_,                    // results array for Nijk
                            resultListPa_,                  // results array for Nij
@@ -116,7 +116,7 @@ public:
                            streamId);
 
         //TODO: fix this condition
-        for (int i = 0; i < maxConfigCount * 32; ++i) {
+        for (int i = 0; i < 1024; ++i) {
             if (resultList_[(streamId * MAX_COUNTS_PER_QUERY) + i] > 0) {
                 F[0](resultList_[(streamId * MAX_COUNTS_PER_QUERY) + i], resultListPa_[(streamId * MAX_COUNTS_PER_QUERY) + i]);
             }
@@ -261,7 +261,7 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT);
     cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT);
 
-    cudaMalloc(&p.intermediaResult_, sizeof(uint64_t) * bitvectorWordCount * (1 << MAX_VARS_FIRST_STAGE) * STREAM_COUNT);
+    cudaMalloc(&p.intermediaResult_, sizeof(uint64_t) * bitvectorSize * 32 * STREAM_COUNT);
 
     p.streams.resize(STREAM_COUNT);
 
