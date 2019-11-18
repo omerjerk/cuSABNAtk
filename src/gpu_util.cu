@@ -97,7 +97,9 @@ CUDA_CALLABLE void startKernel(const uint64_t* inputData,
     dim3 dimBlock(threadCount, 1, 1);
     dim3 dimGrid(configs_per_query, 1, 1);
     int smemSize = (threadCount <= 32) ? 2 * threadCount * sizeof(uint64_t) : threadCount * sizeof(uint64_t);
-    smemSize *= 2;
+    if (isSecondStage) {
+        smemSize *= 2;
+    }
     /*
     if (isPow2(words_per_vector) &&
         (words_per_vector > 1)) // optimize out non power of 2 logic
@@ -460,7 +462,7 @@ __global__ void counts(const T* inputData,
                 variablesCount, // number of variables in a query
                 32, /* number of configs*/
                 5, //TODO: make it safer
-                streamId,
+                0,
                 threadCount,
                 blockIdx.x);
             //TODO: memset 0 results here
