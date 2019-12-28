@@ -40,23 +40,12 @@
 
 #include <cstdint>
 #include <stdio.h>
-#include <assert.h>
 
 #include "gpu_util.cuh"
 
 __constant__ uint64_t aritiesPtr_[4][10];
 __constant__ uint64_t aritiesPrefixProdPtr_[4][11];
 __constant__ uint64_t aritiesPrefixSumPtr_[4][10];
-
-#define cucheck_dev(call)                                   \
-{                                                           \
-  cudaError_t cucheck_err = (call);                         \
-  if(cucheck_err != cudaSuccess) {                          \
-    const char *err_str = cudaGetErrorString(cucheck_err);  \
-    printf("%s (%d): %s\n", __FILE__, __LINE__, err_str);   \
-    assert(0);                                              \
-  }                                                         \
-}
 
 template <class T, unsigned int blockSize, bool nIsPow2, bool isSecondStage>
 __global__ void counts(const T* inputData,
@@ -166,64 +155,65 @@ CUDA_CALLABLE void startKernel(const uint64_t* inputData,
         break;
         }
     } else { */
-        // printf("streamid = %d\n", streamId);
+    printf("streamid = %d\n", streamId);
+    cudaStream_t stream = (cudaStream_t) streamId;
     switch (threadCount) {
         case 512:
-    counts<uint64_t, 512, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+    counts<uint64_t, 512, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
         inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
         configs_per_query, startVariableId, streamId, parentBlockId);
     break;
 
     case 256:
-    counts<uint64_t, 256, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+    counts<uint64_t, 256, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
         inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
         configs_per_query, startVariableId, streamId, parentBlockId);
     break;
 
     case 128:
-    counts<uint64_t, 128, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+    counts<uint64_t, 128, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
         inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
         configs_per_query, startVariableId, streamId, parentBlockId);
     break;
 
     case 64:
-    counts<uint64_t, 64, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+    counts<uint64_t, 64, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
         inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
         configs_per_query, startVariableId, streamId, parentBlockId);
     break;
 
     case 32:
-    counts<uint64_t, 32, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+    counts<uint64_t, 32, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
         inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
         configs_per_query, startVariableId, streamId, parentBlockId);
     break;
 
     case 16:
-    counts<uint64_t, 16, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+    counts<uint64_t, 16, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
         inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
         configs_per_query, startVariableId, streamId, parentBlockId);
     break;
 
     case 8:
-    counts<uint64_t, 8, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+    counts<uint64_t, 8, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
         inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
         configs_per_query, startVariableId, streamId, parentBlockId);
     break;
 
     case 4:
-    counts<uint64_t, 4, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+    counts<uint64_t, 4, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
         inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
         configs_per_query, startVariableId, streamId, parentBlockId);
     break;
 
     case 2:
-    counts<uint64_t, 2, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+    counts<uint64_t, 2, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
         inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
         configs_per_query, startVariableId, streamId, parentBlockId);
     break;
 
     case 1:
-    counts<uint64_t, 1, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+    counts<uint64_t, 1, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
         inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount, 
         configs_per_query, startVariableId, streamId, parentBlockId);
     break;
@@ -280,6 +270,10 @@ __global__ void counts(const T* inputData,
     int intermediateResultIndex;
 
     //TODO: remove the below constant
+    if (tid == 0) {
+        printf("isSecondStage = %d streamId = %d\n", isSecondStage, streamId);
+    }
+
     if (isSecondStage) {
         intermediateResultIndex = (streamId * words_per_vector * 32) + (parentBlockId * words_per_vector) + word_index;
     } else {
@@ -462,7 +456,7 @@ __global__ void counts(const T* inputData,
                 variablesCount, // number of variables in a query
                 32, /* number of configs*/
                 5, //TODO: make it safer
-                0,
+                streamId,
                 threadCount,
                 blockIdx.x);
             //TODO: memset 0 results here
@@ -487,10 +481,11 @@ void cudaCallBlockCount(const uint block_count,
 
   int threadCount = nextPow2((words_per_vector + 1) >> 1);
 
+  printf("starting kernel\n");
   startKernel<false>(bvectorsPtr, results, resultsPa, intermediateData, words_per_vector,
                         variablesCount, configs_per_query, 0, streamId, threadCount, -1);
 
-  cudaStreamSynchronize(0);
+  cudaStreamSynchronize((cudaStream_t) streamId);
 
 } // cudaCallBlockCount
 
