@@ -113,6 +113,7 @@ public:
                            resultList_,                    // results array for Nijk
                            resultListPa_,                  // results array for Nij
                            intermediaResult_,              // memory for intermediate results
+                           streams[streamId],
                            streamId);
 
         //TODO: fix this condition
@@ -258,10 +259,10 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     delete[] tempBvPtr;
 
     // expected size = (number of configurations in the query) * sizeof(uint64_t)
-    cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT);
-    cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT);
+    cucheck_dev(cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT));
+    cucheck_dev(cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT));
 
-    cudaMalloc(&p.intermediaResult_, sizeof(uint64_t) * bitvectorSize * 32 * STREAM_COUNT);
+    cucheck_dev(cudaMalloc(&p.intermediaResult_, sizeof(uint64_t) * bitvectorSize * 32 * STREAM_COUNT));
 
     p.streams.resize(STREAM_COUNT);
 
