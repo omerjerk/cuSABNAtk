@@ -5,6 +5,7 @@
 
 #include <cinttypes>
 #include <vector>
+#include <assert.h>
 
 #include <cuda_runtime.h>
 

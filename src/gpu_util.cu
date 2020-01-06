@@ -40,7 +40,6 @@
 
 #include <cstdint>
 #include <stdio.h>
-#include <assert.h>
 
 #include "gpu_util.cuh"
 
