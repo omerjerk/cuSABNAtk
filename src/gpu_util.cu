@@ -48,16 +48,6 @@ __constant__ uint64_t aritiesPtr_[4][10];
 __constant__ uint64_t aritiesPrefixProdPtr_[4][11];
 __constant__ uint64_t aritiesPrefixSumPtr_[4][10];
 
-#define cucheck_dev(call)                                   \
-{                                                           \
-  cudaError_t cucheck_err = (call);                         \
-  if(cucheck_err != cudaSuccess) {                          \
-    const char *err_str = cudaGetErrorString(cucheck_err);  \
-    printf("%s (%d): %s\n", __FILE__, __LINE__, err_str);   \
-    assert(0);                                              \
-  }                                                         \
-}
-
 template <class T, unsigned int blockSize, bool nIsPow2, bool isSecondStage>
 __global__ void counts(const T* inputData,
                        T* outputData,
