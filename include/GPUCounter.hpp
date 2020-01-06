@@ -29,7 +29,7 @@ static const int MAX_COUNTS_PER_QUERY = 1024;
 static const int MAX_VARS_FIRST_STAGE = 5;
 static const int MAX_COUNTS_FIRST_STAGE = 1 << 5; //considering all variables have arity of 2
 
-#define STREAM_COUNT 1
+#define STREAM_COUNT 2
 static std::atomic_flag isStreamFree[STREAM_COUNT] = {ATOMIC_FLAG_INIT};
 
 template <int N> class GPUCounter {
@@ -61,7 +61,7 @@ public:
 
         int streamId = -1;
         for (int i = 0; i < STREAM_COUNT; ++i) {
-            if (!isStreamFree[i].test_and_set(std::memory_order_relaxed)) {
+            if (!isStreamFree[i].test_and_set()) {
                 streamId = i;
                 break;
             }
