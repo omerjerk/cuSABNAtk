@@ -254,22 +254,22 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
         offset += p.base_->nodeList_[xi].r_ * bitvectorSize;
     }
 
-    cudaMemcpy(bvPtr, tempBvPtr, sizeof(uint64_t) * bitvectorWordCount, cudaMemcpyHostToDevice);
+    cucheck_dev( cudaMemcpy(bvPtr, tempBvPtr, sizeof(uint64_t) * bitvectorWordCount, cudaMemcpyHostToDevice) );
     delete[] tempBvPtr;
 
     // expected size = (number of configurations in the query) * sizeof(uint64_t)
-    cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT);
-    cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT);
+    cucheck_dev( cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT) );
+    cucheck_dev( cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT) );
 
-    cudaMalloc(&p.intermediaResult_, sizeof(uint64_t) * bitvectorSize * 32 * STREAM_COUNT);
+    cucheck_dev( cudaMalloc(&p.intermediaResult_, sizeof(uint64_t) * bitvectorSize * 32 * STREAM_COUNT) );
 
     p.streams.resize(STREAM_COUNT);
 
     for (int i = 0; i < STREAM_COUNT; ++i) {
-        cudaStreamCreate(&p.streams[i]);
+        cucheck_dev( cudaStreamCreate(&p.streams[i]) );
     }
 
-    cudaDeviceSynchronize();
+    cucheck_dev( cudaDeviceSynchronize() );
 
     return p;
 } // create_GPUCounter

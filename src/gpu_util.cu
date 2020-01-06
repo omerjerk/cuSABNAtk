@@ -243,9 +243,9 @@ __host__ void copyAritiesToDevice(int streamId,
                                   const std::vector<uint64_t>& pArities,
                                   const std::vector<uint64_t>& pAritiesPrefixProd,
                                   const std::vector<uint64_t>& pAritiesPrefixSum) {
-    cudaMemcpyToSymbol(aritiesPtr_[streamId], pArities.data(), pArities.size() * sizeof(uint64_t));
-    cudaMemcpyToSymbol(aritiesPrefixProdPtr_[streamId], pAritiesPrefixProd.data(), pAritiesPrefixProd.size() * sizeof(uint64_t));
-    cudaMemcpyToSymbol(aritiesPrefixSumPtr_[streamId], pAritiesPrefixSum.data(), pAritiesPrefixSum.size() * sizeof(uint64_t));
+    cucheck_dev( cudaMemcpyToSymbol(aritiesPtr_[streamId], pArities.data(), pArities.size() * sizeof(uint64_t)) );
+    cucheck_dev( cudaMemcpyToSymbol(aritiesPrefixProdPtr_[streamId], pAritiesPrefixProd.data(), pAritiesPrefixProd.size() * sizeof(uint64_t)) );
+    cucheck_dev( cudaMemcpyToSymbol(aritiesPrefixSumPtr_[streamId], pAritiesPrefixSum.data(), pAritiesPrefixSum.size() * sizeof(uint64_t)) );
 } // m_copyAritiesToDevice__
 
 
@@ -480,7 +480,7 @@ void cudaCallBlockCount(const uint block_count,
   startKernel<false>(bvectorsPtr, results, resultsPa, intermediateData, words_per_vector,
                         variablesCount, configs_per_query, 0, streamId, threadCount, -1);
 
-  cudaStreamSynchronize(0);
+  cucheck_dev( cudaStreamSynchronize(0) );
 
 } // cudaCallBlockCount
 
