@@ -243,9 +243,12 @@ __host__ void copyAritiesToDevice(int streamId,
                                   const std::vector<uint64_t>& pArities,
                                   const std::vector<uint64_t>& pAritiesPrefixProd,
                                   const std::vector<uint64_t>& pAritiesPrefixSum) {
-    cucheck_dev( cudaMemcpyToSymbol(aritiesPtr_[streamId], pArities.data(), pArities.size() * sizeof(uint64_t)) );
-    cucheck_dev( cudaMemcpyToSymbol(aritiesPrefixProdPtr_[streamId], pAritiesPrefixProd.data(), pAritiesPrefixProd.size() * sizeof(uint64_t)) );
-    cucheck_dev( cudaMemcpyToSymbol(aritiesPrefixSumPtr_[streamId], pAritiesPrefixSum.data(), pAritiesPrefixSum.size() * sizeof(uint64_t)) );
+    cucheck_dev( cudaMemcpyToSymbol(aritiesPtr_, pArities.data(),
+        pArities.size() * sizeof(uint64_t), streamId * sizeof(uint64_t) * 10) );
+    cucheck_dev( cudaMemcpyToSymbol(aritiesPrefixProdPtr_,
+        pAritiesPrefixProd.data(), pAritiesPrefixProd.size() * sizeof(uint64_t), streamId * sizeof(uint64_t) * 11) );
+    cucheck_dev( cudaMemcpyToSymbol(aritiesPrefixSumPtr_,
+        pAritiesPrefixSum.data(), pAritiesPrefixSum.size() * sizeof(uint64_t), streamId * sizeof(uint64_t) * 10) );
 } // m_copyAritiesToDevice__
 
 
