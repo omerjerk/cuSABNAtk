@@ -31,7 +31,7 @@ static const int MAX_COUNTS_PER_QUERY = 1024;
 static const int MAX_VARS_FIRST_STAGE = 5;
 static const int MAX_COUNTS_FIRST_STAGE = 1 << 5; //considering all variables have arity of 2
 
-#define STREAM_COUNT 2
+#define STREAM_COUNT 1
 static std::atomic_flag isStreamFree[STREAM_COUNT] = {ATOMIC_FLAG_INIT};
 
 template <int N> class GPUCounter {
@@ -72,7 +72,7 @@ public:
             // printf("sending to CPU\n");
             return this->radCounter->apply(xa_vect, pa_vect, F);
         }
-        printf("sending to GPU %d\n", streamId);
+        // printf("sending to GPU %d\n", streamId);
         int paSize = pa_vect.size();
         std::vector<int> xi(1 + paSize);
 
@@ -113,7 +113,6 @@ public:
                            resultList_,                    // results array for Nijk
                            resultListPa_,                  // results array for Nij
                            intermediaResult_,              // memory for intermediate results
-                           streams[streamId],
                            streamId);
 
         //TODO: fix this condition
@@ -259,18 +258,18 @@ template <int N, typename Iter> GPUCounter<N> create_GPUCounter(int n, int m, It
     delete[] tempBvPtr;
 
     // expected size = (number of configurations in the query) * sizeof(uint64_t)
-    cucheck_dev(cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT));
-    cucheck_dev(cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT));
+    cudaMallocManaged(&p.resultList_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT);
+    cudaMallocManaged(&p.resultListPa_, sizeof(uint64_t) * MAX_COUNTS_PER_QUERY * STREAM_COUNT);
 
-    cucheck_dev(cudaMalloc(&p.intermediaResult_, sizeof(uint64_t) * bitvectorSize * 32 * STREAM_COUNT));
+    cudaMalloc(&p.intermediaResult_, sizeof(uint64_t) * bitvectorSize * 32 * STREAM_COUNT);
 
     p.streams.resize(STREAM_COUNT);
 
     for (int i = 0; i < STREAM_COUNT; ++i) {
-        cucheck_dev(cudaStreamCreate(&p.streams[i]));
+        cudaStreamCreate(&p.streams[i]);
     }
 
-    cucheck_dev(cudaDeviceSynchronize());
+    cudaDeviceSynchronize();
 
     return p;
 } // create_GPUCounter

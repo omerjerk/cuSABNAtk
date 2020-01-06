@@ -3,19 +3,14 @@
 rm gpu_util.o
 rm ../examples/query
 rm query.o
-rm gpu_util_link.o
 
 #compile cuda code
-nvcc -x cu -g -G -arch=sm_61 -c gpu_util.cu -o gpu_util.o -I../include
-#link cuda code
-# nvcc -arch=sm_61 -dlink -o gpu_util_link.o gpu_util.o -lcudadevrt -lcudart
+nvcc -arch=sm_61 -rdc=true -c gpu_util.cu -lcudadevrt -o gpu_util.o -I../include
+#create static library from object code
+ar rcs gpu_util.a gpu_util.o
 #compile C++ code
-g++ -fopenmp  -std=c++14 -c ../examples/query.cpp -o query.o -I/usr/local/cuda-10.0/include -I../include
-#link using nvcc
-# nvcc --default-stream per-thread -arch=sm_61 query.o gpu_util.o -Xcompiler -fopenmp  -std=c++14 -O3  -o ../examples/query \
-# -I/usr/local/cuda-10.0/include -I../include /usr/local/cuda-10.0/lib64/libcudart_static.a \
-# -ldl -lrt /usr/local/cuda-10.0/lib64/libcudart_static.a
-
-#link using g++
-g++ query.o gpu_util.o -fopenmp -std=c++14 -o ../examples/query \
--I/usr/local/cuda-10.0/include -I../include -L/usr/local/cuda-10.0/lib64 -lcudart -lcudadevrt
+g++ -fopenmp  -std=c++14 -O3 -c ../examples/query.cpp -o query.o -I/util/common/cuda/cuda-10.0/include -I../include
+#link
+nvcc -arch=sm_61 query.o gpu_util.a -Xcompiler -fopenmp  -std=c++14 -O3  -o ../examples/query \
+-I/util/common/cuda/cuda-10.0/include -I../include /util/common/cuda/cuda-10.0/lib64/libcudart_static.a \
+-ldl -lrt /util/common/cuda/cuda-10.0/lib64/libcudart_static.a
