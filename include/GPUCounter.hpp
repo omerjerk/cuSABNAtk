@@ -14,8 +14,6 @@
 #ifndef GPU_COUNTER_HPP
 #define GPU_COUNTER_HPP
 
-#define CUDA_API_PER_THREAD_DEFAULT_STREAM
-
 #include <cinttypes>
 #include <vector>
 #include <atomic>
@@ -113,7 +111,8 @@ public:
                            resultList_,                    // results array for Nijk
                            resultListPa_,                  // results array for Nij
                            intermediaResult_,              // memory for intermediate results
-                           streamId);
+                           streamId,
+                           streams[streamId]);
 
         //TODO: fix this condition
         for (int i = 0; i < 1024; ++i) {
