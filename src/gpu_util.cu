@@ -47,7 +47,7 @@ __constant__ uint64_t aritiesPtr_[4][10];
 __constant__ uint64_t aritiesPrefixProdPtr_[4][11];
 __constant__ uint64_t aritiesPrefixSumPtr_[4][10];
 
-template <class T, unsigned int blockSize, bool nIsPow2, bool isSecondStage>
+template <class T, unsigned int blockSize, bool nIsPow2, bool isFinalStage>
 __global__ void counts(const T* inputData,
                        T* outputData,
                        T* outputDataPa,
@@ -71,7 +71,7 @@ CUDA_CALLABLE unsigned int nextPow2(unsigned int x) {
     return ++x;
 } // nextPow2
 
-template <bool isSecondStage>
+template <bool isFinalStage>
 CUDA_CALLABLE void startKernel(const uint64_t* inputData,
     uint64_t* outputData,
     uint64_t* outputDataPa,
@@ -88,66 +88,66 @@ CUDA_CALLABLE void startKernel(const uint64_t* inputData,
     dim3 dimBlock(threadCount, 1, 1);
     dim3 dimGrid(configs_per_query, 1, 1);
     int smemSize = (threadCount <= 32) ? 2 * threadCount * sizeof(uint64_t) : threadCount * sizeof(uint64_t);
-    if (isSecondStage) {
+    if (isFinalStage) {
         smemSize *= 2;
 
         switch (threadCount) {
             case 512:
-        counts<uint64_t, 512, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+        counts<uint64_t, 512, false, isFinalStage><<<dimGrid, dimBlock, smemSize>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 256:
-        counts<uint64_t, 256, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+        counts<uint64_t, 256, false, isFinalStage><<<dimGrid, dimBlock, smemSize>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 128:
-        counts<uint64_t, 128, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+        counts<uint64_t, 128, false, isFinalStage><<<dimGrid, dimBlock, smemSize>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 64:
-        counts<uint64_t, 64, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+        counts<uint64_t, 64, false, isFinalStage><<<dimGrid, dimBlock, smemSize>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 32:
-        counts<uint64_t, 32, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+        counts<uint64_t, 32, false, isFinalStage><<<dimGrid, dimBlock, smemSize>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 16:
-        counts<uint64_t, 16, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+        counts<uint64_t, 16, false, isFinalStage><<<dimGrid, dimBlock, smemSize>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 8:
-        counts<uint64_t, 8, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+        counts<uint64_t, 8, false, isFinalStage><<<dimGrid, dimBlock, smemSize>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 4:
-        counts<uint64_t, 4, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+        counts<uint64_t, 4, false, isFinalStage><<<dimGrid, dimBlock, smemSize>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 2:
-        counts<uint64_t, 2, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+        counts<uint64_t, 2, false, isFinalStage><<<dimGrid, dimBlock, smemSize>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 1:
-        counts<uint64_t, 1, false, isSecondStage><<<dimGrid, dimBlock, smemSize>>>(
+        counts<uint64_t, 1, false, isFinalStage><<<dimGrid, dimBlock, smemSize>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
@@ -157,61 +157,61 @@ CUDA_CALLABLE void startKernel(const uint64_t* inputData,
     } else {
         switch (threadCount) {
             case 512:
-        counts<uint64_t, 512, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
+        counts<uint64_t, 512, false, isFinalStage><<<dimGrid, dimBlock, smemSize, stream>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 256:
-        counts<uint64_t, 256, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
+        counts<uint64_t, 256, false, isFinalStage><<<dimGrid, dimBlock, smemSize, stream>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 128:
-        counts<uint64_t, 128, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
+        counts<uint64_t, 128, false, isFinalStage><<<dimGrid, dimBlock, smemSize, stream>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 64:
-        counts<uint64_t, 64, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
+        counts<uint64_t, 64, false, isFinalStage><<<dimGrid, dimBlock, smemSize, stream>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 32:
-        counts<uint64_t, 32, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
+        counts<uint64_t, 32, false, isFinalStage><<<dimGrid, dimBlock, smemSize, stream>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 16:
-        counts<uint64_t, 16, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
+        counts<uint64_t, 16, false, isFinalStage><<<dimGrid, dimBlock, smemSize, stream>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 8:
-        counts<uint64_t, 8, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
+        counts<uint64_t, 8, false, isFinalStage><<<dimGrid, dimBlock, smemSize, stream>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 4:
-        counts<uint64_t, 4, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
+        counts<uint64_t, 4, false, isFinalStage><<<dimGrid, dimBlock, smemSize, stream>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 2:
-        counts<uint64_t, 2, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
+        counts<uint64_t, 2, false, isFinalStage><<<dimGrid, dimBlock, smemSize, stream>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
 
         case 1:
-        counts<uint64_t, 1, false, isSecondStage><<<dimGrid, dimBlock, smemSize, stream>>>(
+        counts<uint64_t, 1, false, isFinalStage><<<dimGrid, dimBlock, smemSize, stream>>>(
             inputData, outputData, outputDataPa, intermediateData, words_per_vector, variablesCount,
             configs_per_query, startVariableId, streamId, stream, parentBlockId);
         break;
@@ -250,7 +250,7 @@ __host__ void copyAritiesToDevice(int streamId,
 } // m_copyAritiesToDevice__
 
 
-template <class T, unsigned int blockSize, bool nIsPow2, bool isSecondStage>
+template <class T, unsigned int blockSize, bool nIsPow2, bool isFinalStage>
 __global__ void counts(const T* inputData,
                        T* outputData,
                        T* outputDataPa,
@@ -272,7 +272,7 @@ __global__ void counts(const T* inputData,
     int intermediateResultIndex;
 
     //TODO: remove the below constant
-    if (isSecondStage) {
+    if (isFinalStage) {
         intermediateResultIndex = (streamId * words_per_vector * 32) + (parentBlockId * words_per_vector) + word_index;
     } else {
         intermediateResultIndex = (streamId * words_per_vector * 32) + (blockIdx.x * words_per_vector) + word_index;
@@ -291,7 +291,7 @@ __global__ void counts(const T* inputData,
         paBitVect = paBitVect & *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][p] + temp) * words_per_vector) + word_index);
     }
 
-    if (isSecondStage) {
+    if (isFinalStage) {
         paBitVect &= intermediateData[intermediateResultIndex];
         temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][variablesCount-1]) % aritiesPtr_[streamId][variablesCount-1]);
         xiBitVect = *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][variablesCount-1] + temp) * words_per_vector) + word_index);
@@ -315,7 +315,7 @@ __global__ void counts(const T* inputData,
             paBitVect = paBitVect & *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][p] + temp) * words_per_vector) + word_index_upper_half);
         }
 
-        if (isSecondStage) {
+        if (isFinalStage) {
             paBitVect &= intermediateData[intermediateResultIndex + blockSize];
             temp = ((blockIdx.x / aritiesPrefixProdPtr_[streamId][variablesCount-1]) % aritiesPtr_[streamId][variablesCount-1]);
             xiBitVect = *(((uint64_t*)inputData) + ((aritiesPrefixSumPtr_[streamId][variablesCount-1] + temp) * words_per_vector) + word_index_upper_half);
@@ -328,7 +328,7 @@ __global__ void counts(const T* inputData,
     }
 
     // each thread puts its local sum into shared memory
-    if (isSecondStage) {
+    if (isFinalStage) {
         sDataTot[tid] = totSum;
     }
     sDataPa[tid] = paSum;
@@ -337,7 +337,7 @@ __global__ void counts(const T* inputData,
 
     // do reduction in shared mem
     if ((blockSize >= 512) && (tid < 256)) {
-        if (isSecondStage) {
+        if (isFinalStage) {
             sDataTot[tid] = totSum = totSum + sDataTot[tid + 256];
         }
         sDataPa[tid] = paSum = paSum + sDataPa[tid + 256];
@@ -346,7 +346,7 @@ __global__ void counts(const T* inputData,
     __syncthreads();
 
     if ((blockSize >= 256) && (tid < 128)) {
-        if (isSecondStage) {
+        if (isFinalStage) {
             sDataTot[tid] = totSum = totSum + sDataTot[tid + 128];
         }
         sDataPa[tid] = paSum = paSum + sDataPa[tid + 128];
@@ -355,7 +355,7 @@ __global__ void counts(const T* inputData,
     __syncthreads();
 
     if ((blockSize >= 128) && (tid <  64)) {
-        if (isSecondStage) {
+        if (isFinalStage) {
             sDataTot[tid] = totSum = totSum + sDataTot[tid +  64];
         }
         sDataPa[tid] = paSum = paSum + sDataPa[tid + 64];
@@ -367,14 +367,14 @@ __global__ void counts(const T* inputData,
     if ( tid < 32 ) {
         // Fetch final intermediate sum from 2nd warp
         if (blockSize >=  64) {
-            if (isSecondStage) {
+            if (isFinalStage) {
                 totSum += sDataTot[tid + 32];
             }
             paSum += sDataPa[tid + 32];
         }
         // Reduce final warp using shuffle
         for (int offset = warpSize / 2; offset > 0; offset /= 2) {
-            if (isSecondStage) {
+            if (isFinalStage) {
                 totSum += __shfl_down_sync(0xFFFFFFFF, totSum, offset);
             }
             paSum += __shfl_down_sync(0xFFFFFFFF, paSum, offset);
@@ -383,7 +383,7 @@ __global__ void counts(const T* inputData,
     #else
     // fully unroll reduction within a single warp
     if ((blockSize >= 64) && (tid < 32)) {
-        if (isSecondStage) {
+        if (isFinalStage) {
             sDataTot[tid] = totSum = totSum + sDataTot[tid + 32];
         }
         sDataPa[tid] = paSum = paSum + sDataPa[tid + 32];
@@ -392,7 +392,7 @@ __global__ void counts(const T* inputData,
     __syncthreads();
 
     if ((blockSize >= 32) && (tid < 16)) {
-        if (isSecondStage) {
+        if (isFinalStage) {
             sDataTot[tid] = totSum = totSum + sDataTot[tid + 16];
         }
         sDataPa[tid] = paSum = paSum + sDataPa[tid + 16];
@@ -401,7 +401,7 @@ __global__ void counts(const T* inputData,
     __syncthreads();
 
     if ((blockSize >= 16) && (tid <  8)) {
-        if (isSecondStage) {
+        if (isFinalStage) {
             sDataTot[tid] = totSum = totSum + sDataTot[tid +  8];
         }
         sDataPa[tid] = paSum = paSum + sDataPa[tid + 8];
@@ -410,7 +410,7 @@ __global__ void counts(const T* inputData,
     __syncthreads();
 
     if ((blockSize >= 8) && (tid <  4)) {
-        if (isSecondStage) {
+        if (isFinalStage) {
             sDataTot[tid] = totSum = totSum + sDataTot[tid +  4];
         }
         sDataPa[tid] = paSum = paSum + sDataPa[tid + 4];
@@ -419,7 +419,7 @@ __global__ void counts(const T* inputData,
     __syncthreads();
 
     if ((blockSize >= 4) && (tid <  2)) {
-        if (isSecondStage) {
+        if (isFinalStage) {
             sDataTot[tid] = totSum = totSum + sDataTot[tid +  2];
         }
         sDataPa[tid] = paSum = paSum + sDataPa[tid + 2];
@@ -428,7 +428,7 @@ __global__ void counts(const T* inputData,
     __syncthreads();
 
     if ((blockSize >= 2) && ( tid <  1)) {
-        if (isSecondStage) {
+        if (isFinalStage) {
             sDataTot[tid] = totSum = totSum + sDataTot[tid +  1];
         }
         sDataPa[tid] = paSum = paSum + sDataPa[tid + 1];
@@ -440,7 +440,7 @@ __global__ void counts(const T* inputData,
     // write result for this block to global mem
     if (tid == 0) {
         //TODO: bypass this logic if number of variables is already small
-        if (isSecondStage) {
+        if (isFinalStage) {
             //TODO: use global constant here or something else?
             outputData[(streamId*1024) + (parentBlockId * 32) + blockIdx.x] = totSum;
             outputDataPa[(streamId*1024) + (parentBlockId * 32) + blockIdx.x] = paSum;
